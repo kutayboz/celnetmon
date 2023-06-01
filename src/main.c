@@ -1,4 +1,3 @@
-#include <bits/types/time_t.h>
 #include <errno.h> /* strerror() */
 #include <fcntl.h> /* O_RDWR */
 #include <stdio.h>
@@ -8,7 +7,9 @@
 #include <time.h>
 #include <unistd.h> /* write(), read(), close() */
 
-int openSerialPort(char pathToPort[], int baudRate) {
+#define BUFFER_SIZE 256
+
+int openSerialPort(char pathToPort[]) {
 
   static int serialPort;
   struct termios serialTerminal;
@@ -21,6 +22,7 @@ int openSerialPort(char pathToPort[], int baudRate) {
 
   if (tcgetattr(serialPort, &serialTerminal) != 0) {
     printf("Error tcgetattr(): %s\n", strerror(errno));
+    close(serialPort);
     return -1;
   }
 
@@ -43,8 +45,8 @@ int openSerialPort(char pathToPort[], int baudRate) {
   serialTerminal.c_cc[VTIME] = 0;
   serialTerminal.c_cc[VMIN] = 0;
 
-  cfsetispeed(&serialTerminal, baudRate);
-  cfsetospeed(&serialTerminal, baudRate);
+  cfsetispeed(&serialTerminal, B115200);
+  cfsetospeed(&serialTerminal, B115200);
 
   if (tcsetattr(serialPort, TCSANOW, &serialTerminal) != 0) {
     printf("Error tcsetattr(): %s\n", strerror(errno));
@@ -55,86 +57,91 @@ int openSerialPort(char pathToPort[], int baudRate) {
   return serialPort;
 }
 
-int readSerialPort(int serialPort) {
+int querySerialPort(int serialPort, char *input) {
 
-  time_t start;
-  int bytesRead, bufferFree, idx, returnCode, isEnd;
-  int bufferSize = sizeof(char) * 256; /* initial size in bytes */
-  char *buffer = calloc(256, sizeof(char));
+  time_t timeStart;
+  unsigned long idx;
+  int bytesRead, bufferFree, returnCode, isEnd,
+      bufferSize = sizeof(char) * BUFFER_SIZE; /* initial size in bytes */
+  char *txBuffer, *buffer = calloc(BUFFER_SIZE, sizeof(char));
   const char *responseCodes[8] = {"\r\nOK\r\n",    "\r\nCONNECT\r\n",
                                   "\r\nRING\r\n",  "\r\nNO CARRIER\r\n",
                                   "\r\nERROR\r\n", "\r\nNO DIALTONE\r\n",
                                   "\r\nBUSY\r\n",  "\r\nNO ANSWER\r\n"};
 
+  txBuffer = malloc(sizeof(char) * (strlen(input) + 2));
+  strncpy(txBuffer, input, sizeof(char) * (strlen(input) + 1));
+  strncat(txBuffer, "\r", 2 * sizeof(char));
+  if (write(serialPort, txBuffer, sizeof(char) * (strlen(txBuffer))) < 0) {
+    printf("Error write(): %s\n", strerror(errno));
+    free(txBuffer);
+    free(buffer);
+    return 1;
+  }
+  free(txBuffer);
+
   bytesRead = bufferFree = bufferSize;
   returnCode = isEnd = 0;
-  start = time(NULL);
-
+  timeStart = time(NULL);
   while (!isEnd) {
-    if (bufferFree < 1) {
-      bufferSize += sizeof(char) * 256;
-      buffer = realloc(buffer, bufferSize);
-      if (buffer == NULL) {
-        printf("Error realloc(): %s\n", strerror(errno));
-        returnCode = 1;
-        break;
-      }
-    }
-    bytesRead = read(serialPort, buffer + bufferSize - bufferFree, bufferFree);
+    bytesRead =
+        read(serialPort, buffer + bufferSize - bufferFree, bufferFree - 1);
     if (bytesRead < 0) {
-      printf("Error read(): %s\n", strerror(errno));
+      printf("Error reading serial port\n");
       returnCode = 1;
       break;
-    } else if (bytesRead > 0) {
-      bufferFree -= bytesRead;
-      start = time(NULL);
-    } else if (bytesRead == 0 && difftime(time(NULL), start) > 180) {
-      printf("Response timeout\n");
-      returnCode = 1;
-      break;
-    } else {
-      for (idx = 0; (long unsigned)idx <
-                    sizeof(responseCodes) / sizeof(responseCodes[1]);
+    }
+
+    else if (bytesRead > 0) {
+      buffer[bytesRead] = '\0';
+      bufferFree -= (bytesRead + 1);
+
+      if (bufferFree == 0) {
+        bufferSize += bufferFree = BUFFER_SIZE;
+        buffer = realloc(buffer, bufferSize);
+      }
+
+      for (idx = 0; idx < sizeof(responseCodes) / sizeof(*responseCodes);
            idx++) {
-        if (strstr(buffer, responseCodes[idx]) != NULL) {
+        if (strstr(buffer, responseCodes[idx])) {
           isEnd = 1;
           break;
         }
       }
+    } else if (bytesRead == 0 && time(NULL) - timeStart > 180) {
+      printf("Response timeout after 180 seconds\n");
+      returnCode = 1;
+      break;
     }
   }
 
-  printf("%s", buffer);
+  printf("%s\n", buffer);
   free(buffer);
   return returnCode;
 }
 
 int main() {
 
+  char *commandList[] = {"AT", "ATI", "AT+COPS?"/* ,
+                         "AT+COPS=?" */},
+       serialFilePath[] = "/dev/serial0";
+
   int serialPort;
+  unsigned long idx;
 
-  serialPort = openSerialPort("/dev/serial0", 115200);
-
-  if (write(serialPort, "AT\r", sizeof("AT\r")) < 0) {
-    printf("Error write(): %s\n", strerror(errno));
-    close(serialPort);
+  serialPort = openSerialPort(serialFilePath);
+  if (serialPort < 0) {
+    printf("Error openSerialPort()\n");
     return 1;
   }
-  readSerialPort(serialPort);
 
-  if (write(serialPort, "ATI\r", sizeof("ATI\r")) < 0) {
-    printf("Error write(): %s\n", strerror(errno));
-    close(serialPort);
-    return 1;
+  for (idx = 0; idx < sizeof(commandList) / sizeof(*commandList); idx++) {
+    if (0 != querySerialPort(serialPort, commandList[idx])) {
+      printf("Error querySerialPort()\n");
+      close(serialPort);
+      return 1;
+    }
   }
-  readSerialPort(serialPort);
-
-  if (write(serialPort, "AT+COPS?\r", sizeof("AT+COPS?\r")) < 0) {
-    printf("Error write(): %s\n", strerror(errno));
-    close(serialPort);
-    return 1;
-  }
-  readSerialPort(serialPort);
 
   close(serialPort);
 
