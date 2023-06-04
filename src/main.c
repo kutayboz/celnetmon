@@ -21,7 +21,7 @@ int main() {
     return 1;
   }
 
-  if (0 != querySerialPort(&output, serialPort, "AT")) {
+  /* if (0 != querySerialPort(&output, serialPort, "AT")) {
     printf("Error querySerialPort()\n");
     close(serialPort);
     free(output);
@@ -33,7 +33,7 @@ int main() {
       free(output);
       return 1;
     }
-  }
+  } */
 
   for (idx = 0; idx < sizeof(commandList) / sizeof(*commandList); idx++) {
     if (0 != querySerialPort(&output, serialPort, commandList[idx])) {
@@ -42,16 +42,16 @@ int main() {
       free(output);
       return 1;
     }
-    printf("%s", output);
+    printf("%s\n", output);
   }
 
   close(serialPort);
 
-  if (0 != modemPowerToggle(17)) {
+  /* if (0 != modemPowerToggle(17)) {
     printf("Error toggling modem power\n");
     free(output);
     return 1;
-  }
+  } */
 
   free(output);
   return 0;

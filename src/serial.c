@@ -6,7 +6,7 @@
 #include <termios.h>
 #include <time.h>
 
-#define BUFFER_SIZE 256
+#define BUFFER_SIZE sizeof(char) * 256
 
 int openSerialPort(char pathToPort[]) {
 
@@ -35,14 +35,15 @@ int openSerialPort(char pathToPort[]) {
 
   /* serialTerminal.c_lflag &= ~(ECHO | ECHONL | NOFLSH | ISIG | TOSTOP | ICANON
      | IEXTEN | ECHOE | ECHOK); */
-  serialTerminal.c_lflag &= ~(ICANON | ISIG | ECHO | ECHONL | ECHOE | ECHOK);
+  serialTerminal.c_lflag |= ICANON;
+  serialTerminal.c_lflag &= ~(ISIG | ECHO | ECHONL | ECHOE | ECHOK);
 
   /* serialTerminal.c_oflag &=
       ~(OLCUC | OCRNL | OPOST | OFILL | ONLCR | ONOCR | ONLRET | OFDEL); */
   serialTerminal.c_oflag &= ~(OPOST);
 
-  serialTerminal.c_cc[VTIME] = 0;
-  serialTerminal.c_cc[VMIN] = 0;
+  serialTerminal.c_cc[VTIME] = 50;
+  serialTerminal.c_cc[VMIN] = 1;
 
   cfsetispeed(&serialTerminal, B115200);
   cfsetospeed(&serialTerminal, B115200);
@@ -60,9 +61,9 @@ int querySerialPort(char **output, int serialPort, char *input) {
 
   time_t timeStart;
   unsigned long idx;
-  int bytesRead, bufferFree, returnCode, isEnd,
-      bufferSize = sizeof(char) * BUFFER_SIZE; /* initial size in bytes */
-  char *txBuffer, *buffer = calloc(BUFFER_SIZE, sizeof(char));
+  int bytesRead, returnCode, isEnd,
+      bufferSize = BUFFER_SIZE; /* initial size in bytes */
+  char *bufferCurrentPtr, *txBuffer, *buffer = malloc(BUFFER_SIZE);
   const char *responseCodes[8] = {"\r\nOK\r\n",    "\r\nCONNECT\r\n",
                                   "\r\nRING\r\n",  "\r\nNO CARRIER\r\n",
                                   "\r\nERROR\r\n", "\r\nNO DIALTONE\r\n",
@@ -80,26 +81,24 @@ int querySerialPort(char **output, int serialPort, char *input) {
   free(txBuffer);
 
   bytesRead = 0;
-  bufferFree = bufferSize;
   returnCode = isEnd = 0;
+  bufferCurrentPtr = buffer;
   timeStart = time(NULL);
   while (!isEnd) {
-    bytesRead =
-        read(serialPort, buffer + bufferSize - bufferFree, bufferFree - 1);
+    bytesRead = read(serialPort, bufferCurrentPtr, bufferSize);
     if (bytesRead < 0) {
       printf("Error reading serial port\n");
       returnCode = 1;
       break;
+    } else if (buffer[bytesRead] != '\n' && bytesRead == bufferSize) {
+      bufferSize += BUFFER_SIZE;
+      buffer = realloc(buffer, bufferSize);
     }
 
-    else if (bytesRead > 0) {
-      buffer[bytesRead] = '\0';
-      bufferFree -= (bytesRead + 1);
+    bufferCurrentPtr += bytesRead;
 
-      if (bufferFree == 0) {
-        bufferSize += bufferFree = BUFFER_SIZE;
-        buffer = realloc(buffer, bufferSize);
-      }
+    if (bytesRead > 0) {
+      *bufferCurrentPtr = '\0';
 
       for (idx = 0; idx < sizeof(responseCodes) / sizeof(*responseCodes);
            idx++) {
@@ -115,8 +114,8 @@ int querySerialPort(char **output, int serialPort, char *input) {
     }
   }
 
-  *output = realloc(*output, bufferSize);
-  strncpy(*output, buffer, bufferSize);
+  *output = realloc(*output, sizeof(char) * (strlen(buffer) + 1));
+  strncpy(*output, buffer, sizeof(char) * (strlen(buffer) + 1));
   free(buffer);
   return returnCode;
 }
