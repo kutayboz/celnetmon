@@ -3,4 +3,6 @@
 
 int modemPowerToggle(int pinNumber);
 
+int checkPinVal(int pinNum);
+
 #endif
