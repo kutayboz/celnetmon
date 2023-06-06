@@ -3,9 +3,9 @@ set(CMAKE_C_STANDARD 90)
 set(CMAKE_C_STANDARD_REQUIRED True)
 
 project(network_monitor VERSION 0.1.0)
-set(CMAKE_CXX_FLAGS "-Wall -Wextra -Werror -pedantic-errors")
-set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS} -g -O0")
-set(CMAKE_C_FLAGS_RELEASE "${CMAKE_CXX_FLAGS} -O2")
+set(CMAKE_C_FLAGS "-Wall -Wextra -Werror -pedantic-errors")
+set(CMAKE_C_FLAGS_DEBUG "${CMAKE_C_FLAGS} -g -O0")
+set(CMAKE_C_FLAGS_RELEASE "${CMAKE_C_FLAGS} -O2")
 add_executable(network_monitor ./src/main.c)
 
 add_library(gpio STATIC ./src/gpio.c ./include/gpio.h)

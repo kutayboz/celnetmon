@@ -1,5 +1,6 @@
 #include <gpiod.h>
 #include <stdio.h>
+#include <unistd.h>
 
 int modemPowerToggle(int pinNum) {
   struct gpiod_chip *chip;
@@ -11,8 +12,7 @@ int modemPowerToggle(int pinNum) {
     return 1;
   }
 
-  line = gpiod_chip_get_line(
-      chip, pinNum); // Replace with the desired GPIO pin number
+  line = gpiod_chip_get_line(chip, pinNum);
   if (!line) {
     perror("Error getting GPIO line");
     gpiod_chip_close(chip);
@@ -54,8 +54,7 @@ int checkPinVal(int pinNum) {
     return -1;
   }
 
-  line = gpiod_chip_get_line(
-      chip, pinNum); // Replace with the desired GPIO pin number
+  line = gpiod_chip_get_line(chip, pinNum);
   if (!line) {
     perror("Error getting GPIO line");
     gpiod_chip_close(chip);
