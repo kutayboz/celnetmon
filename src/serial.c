@@ -42,7 +42,7 @@ int openSerialPort(char pathToPort[]) {
       ~(OLCUC | OCRNL | OPOST | OFILL | ONLCR | ONOCR | ONLRET | OFDEL); */
   serialTerminal.c_oflag &= ~(OPOST);
 
-  serialTerminal.c_cc[VTIME] = 2;
+  serialTerminal.c_cc[VTIME] = 20;
   serialTerminal.c_cc[VMIN] = 0;
 
   cfsetispeed(&serialTerminal, B115200);
