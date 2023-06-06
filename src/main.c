@@ -10,6 +10,8 @@
 int main() {
 
   char *commandList[] = {"AT", "ATI", "AT+COPS?", "AT+COPS=?"},
+       *infoCmdList[] = {"AT+CREG?",   "AT+COPS?", "AT+CSQ",  "AT+QLTS=1",
+                         "AT+QNWINFO", "AT+QCSQ",  "AT+QSPN", "AT+CCLK?"},
        serialFilePath[] = "/dev/serial0", *output;
 
   int serialPort, moduleStatus;
@@ -34,6 +36,7 @@ int main() {
         return 1;
       }
     }
+    sleep(5); /* Wait for APP RDY*/
   }
 
   serialPort = openSerialPort(serialFilePath);
@@ -53,8 +56,17 @@ int main() {
     printf("%s\n", output);
   }
 
-  close(serialPort);
+  for (idx = 0; idx < sizeof(infoCmdList) / sizeof(*infoCmdList); idx++) {
+    if (0 != querySerialPort(&output, serialPort, infoCmdList[idx])) {
+      printf("Error querySerialPort()\n");
+      close(serialPort);
+      free(output);
+      return 1;
+    }
+    printf("%s\n", output);
+  }
 
+  close(serialPort);
   free(output);
   return 0;
 }
