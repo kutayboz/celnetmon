@@ -9,9 +9,18 @@
 
 int main() {
 
-  char *commandList[] = {"AT", "ATI", "AT+COPS?", "AT+COPS=?"},
-       *infoCmdList[] = {"AT+CREG?",   "AT+COPS?", "AT+CSQ",  "AT+QLTS=1",
-                         "AT+QNWINFO", "AT+QCSQ",  "AT+QSPN", "AT+CCLK?"},
+  char *commandList[] = {"AT",
+                         "ATI",
+                         "AT+QCFG=\"nwscanmode\"",
+                         "AT+QCFG=\"iotopmode\"",
+                         "AT+COPS?",
+                         "AT+CREG?",
+                         "AT+CSQ",
+                         "AT+QLTS=1",
+                         "AT+QNWINFO",
+                         "AT+QCSQ",
+                         "AT+QSPN",
+                         "AT+CCLK?"},
        serialFilePath[] = "/dev/serial0", *output;
 
   int serialPort, moduleStatus;
@@ -48,16 +57,6 @@ int main() {
   output = malloc(1);
   for (idx = 0; idx < sizeof(commandList) / sizeof(*commandList); idx++) {
     if (0 != querySerialPort(&output, serialPort, commandList[idx])) {
-      printf("Error querySerialPort()\n");
-      close(serialPort);
-      free(output);
-      return 1;
-    }
-    printf("%s\n", output);
-  }
-
-  for (idx = 0; idx < sizeof(infoCmdList) / sizeof(*infoCmdList); idx++) {
-    if (0 != querySerialPort(&output, serialPort, infoCmdList[idx])) {
       printf("Error querySerialPort()\n");
       close(serialPort);
       free(output);
