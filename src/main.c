@@ -8,6 +8,8 @@
 
 #define PATH_TO_SERIAL_PORT "/dev/serial0"
 #define PATH_TO_GPIO_CHIP "/dev/gpiochip0"
+#define PIN_NUM_PWR_KEY 17
+#define PIN_NUM_STATUS 27
 
 int main() {
   /* char *commandList[] = {"AT",
@@ -39,7 +41,8 @@ int main() {
            "AT+QPING=1,\"www.google.fi\"",
            "AT+QPING=1,\"8.8.8.8\""}; */
 
-  if (0 != powerOn(PATH_TO_SERIAL_PORT, PATH_TO_GPIO_CHIP, 27, 17)) {
+  if (0 != powerOn(PATH_TO_SERIAL_PORT, PATH_TO_GPIO_CHIP, PIN_NUM_STATUS,
+                   PIN_NUM_PWR_KEY)) {
     printf("Error powering the module on\n");
     return 1;
   }
@@ -56,7 +59,8 @@ int main() {
 
   if (0 != tcpipInit(PATH_TO_SERIAL_PORT)) {
     printf("Error initiating TCP/IP context\nPowering off\n");
-    if (0 != powerOff(PATH_TO_SERIAL_PORT, PATH_TO_GPIO_CHIP, 27, 17)) {
+    if (0 != powerOff(PATH_TO_SERIAL_PORT, PATH_TO_GPIO_CHIP, PIN_NUM_STATUS,
+                      PIN_NUM_PWR_KEY)) {
       printf("Error powering the module off\n");
       return 1;
     }
@@ -65,14 +69,16 @@ int main() {
 
   if (0 != tcpipClose(PATH_TO_SERIAL_PORT)) {
     printf("Error closing TCP/IP context\nPowering off\n");
-    if (0 != powerOff(PATH_TO_SERIAL_PORT, PATH_TO_GPIO_CHIP, 27, 17)) {
+    if (0 != powerOff(PATH_TO_SERIAL_PORT, PATH_TO_GPIO_CHIP, PIN_NUM_STATUS,
+                      PIN_NUM_PWR_KEY)) {
       printf("Error powering the module off\n");
       return 1;
     }
     return 1;
   }
 
-  if (0 != powerOff(PATH_TO_SERIAL_PORT, PATH_TO_GPIO_CHIP, 27, 17)) {
+  if (0 != powerOff(PATH_TO_SERIAL_PORT, PATH_TO_GPIO_CHIP, PIN_NUM_STATUS,
+                    PIN_NUM_PWR_KEY)) {
     printf("Error powering the module off\n");
     return 1;
   }
