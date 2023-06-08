@@ -2,11 +2,11 @@
 #include <stdio.h>
 #include <unistd.h>
 
-int modemPowerToggle(int pinNum) {
+int modemPowerToggle(char *pathToChip, int pinNum) {
   struct gpiod_chip *chip;
   struct gpiod_line *line;
 
-  chip = gpiod_chip_open("/dev/gpiochip0");
+  chip = gpiod_chip_open(pathToChip);
   if (!chip) {
     perror("Error opening GPIO chip");
     return 1;
@@ -43,12 +43,12 @@ int modemPowerToggle(int pinNum) {
   return 0;
 }
 
-int checkPinVal(int pinNum) {
+int checkPinVal(char *pathToChip, int pinNum) {
   int pinVal = -1;
   struct gpiod_chip *chip;
   struct gpiod_line *line;
 
-  chip = gpiod_chip_open("/dev/gpiochip0");
+  chip = gpiod_chip_open(pathToChip);
   if (!chip) {
     perror("Error opening GPIO chip");
     return -1;

@@ -57,7 +57,8 @@ int openSerialPort(char pathToPort[]) {
   return serialPort;
 }
 
-int querySerialPort(char **output, int serialPort, char *input) {
+int querySerialPort(char **output, int serialPort, char *input,
+                    int timeoutSeconds) {
 
   time_t timeStart;
   unsigned long idx;
@@ -104,8 +105,8 @@ int querySerialPort(char **output, int serialPort, char *input) {
           break;
         }
       }
-    } else if (bytesRead == 0 && time(NULL) - timeStart > 180) {
-      printf("Response timeout after 180 seconds\n");
+    } else if (bytesRead == 0 && time(NULL) - timeStart > timeoutSeconds) {
+      printf("Response timeout after %d seconds\n", timeoutSeconds);
       returnCode = 1;
       break;
     }

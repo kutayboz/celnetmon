@@ -3,6 +3,7 @@
 
 int openSerialPort(char pathToPort[]);
 
-int querySerialPort(char **output, int serialPort, char *input);
+int querySerialPort(char **output, int serialPort, char *input,
+                    int timeoutSeconds);
 
 #endif
