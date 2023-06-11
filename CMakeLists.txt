@@ -14,7 +14,7 @@ target_link_libraries(gpio gpiod)
 add_library(serial STATIC ./src/serial.c ./include/serial.h)
 
 add_library(bg96 STATIC ./src/bg96.c ./include/bg96.h)
-target_link_libraries(bg96 serial gpio)
+target_link_libraries(bg96 serial gpio m)
 target_include_directories(bg96 PUBLIC ./include)
 
 target_include_directories(network_monitor PUBLIC ./include)

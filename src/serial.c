@@ -9,6 +9,8 @@
 
 #define BUFFER_SIZE sizeof(char) * 256
 
+typedef enum { SUCCESS, ERROR_READ, ERROR_TIMEOUT } SERIAL_RETURN_CODE;
+
 int openSerialPort(char pathToPort[]) {
 
   static int serialPort;
@@ -57,12 +59,13 @@ int openSerialPort(char pathToPort[]) {
   return serialPort;
 }
 
-int querySerialPort(char **output, int serialPort, char *input,
-                    int timeoutSeconds) {
+SERIAL_RETURN_CODE querySerialPort(char **output, int serialPort, char *input,
+                                   int timeoutSeconds, char *lastLineSubStr) {
 
   time_t timeStart;
   unsigned long idx;
-  int bytesRead, returnCode, isEnd, beforeLength;
+  int bytesRead, isEnd, beforeLength;
+  SERIAL_RETURN_CODE returnCode;
   char *txBuffer, *buffer = malloc(BUFFER_SIZE);
   const char *responseCodes[8] = {"\r\nOK\r\n",    "\r\nCONNECT\r\n",
                                   "\r\nRING\r\n",  "\r\nNO CARRIER\r\n",
@@ -83,13 +86,13 @@ int querySerialPort(char **output, int serialPort, char *input,
   *output = realloc(*output, sizeof(char));
   **output = '\0';
   bytesRead = 0;
-  returnCode = isEnd = 0;
+  returnCode = isEnd = SUCCESS;
   timeStart = time(NULL);
   while (!isEnd) {
     bytesRead = read(serialPort, buffer, BUFFER_SIZE);
     if (bytesRead < 0) {
       printf("Error reading serial port\n");
-      returnCode = 1;
+      returnCode = ERROR_READ;
       break;
     }
 
@@ -98,16 +101,26 @@ int querySerialPort(char **output, int serialPort, char *input,
       *output = realloc(*output, sizeof(char) * (beforeLength + 1) + bytesRead);
       memcpy(*output + beforeLength, buffer, bytesRead);
       (*output)[beforeLength + (bytesRead / sizeof(char))] = '\0';
-      for (idx = 0; idx < sizeof(responseCodes) / sizeof(*responseCodes);
-           idx++) {
-        if (strstr(*output, responseCodes[idx])) {
+      if (lastLineSubStr != NULL) {
+        if (strstr(*output, lastLineSubStr) &&
+            0 == strcmp(
+                     &(*output)[beforeLength + (bytesRead / sizeof(char)) - 2],
+                     "\r\n")) {
           isEnd = 1;
           break;
+        }
+      } else {
+        for (idx = 0; idx < sizeof(responseCodes) / sizeof(*responseCodes);
+             idx++) {
+          if (strstr(*output, responseCodes[idx])) {
+            isEnd = 1;
+            break;
+          }
         }
       }
     } else if (bytesRead == 0 && time(NULL) - timeStart > timeoutSeconds) {
       printf("Response timeout after %d seconds\n", timeoutSeconds);
-      returnCode = 1;
+      returnCode = ERROR_TIMEOUT;
       break;
     }
   }

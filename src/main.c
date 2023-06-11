@@ -11,7 +11,7 @@
 #define PIN_NUM_PWR_KEY 17
 #define PIN_NUM_STATUS 27
 
-int main() {
+int main(int argc, char **argv) {
   /* char *commandList[] = {"AT",
                          "ATI",
                          "AT+QCFG=\"nwscanmode\"",
@@ -41,47 +41,74 @@ int main() {
            "AT+QPING=1,\"www.google.fi\"",
            "AT+QPING=1,\"8.8.8.8\""}; */
 
-  if (0 != powerOn(PATH_TO_SERIAL_PORT, PATH_TO_GPIO_CHIP, PIN_NUM_STATUS,
-                   PIN_NUM_PWR_KEY)) {
-    printf("Error powering the module on\n");
+  if (argc == 1) {
+    printf("No arguments provided\n");
     return 1;
   }
 
-  if (0 != setupPublicConnection(PATH_TO_SERIAL_PORT)) {
-    printf("Error setting public network configuration\n");
-    return 1;
+  else if (0 == strcmp(argv[1], "--init")) {
+
+    if (0 != powerOn(PATH_TO_SERIAL_PORT, PATH_TO_GPIO_CHIP, PIN_NUM_STATUS,
+                     PIN_NUM_PWR_KEY)) {
+      printf("Error powering the module on\n");
+      return 1;
+    }
+
+    if (0 != cfgPublicNetwork(PATH_TO_SERIAL_PORT)) {
+      printf("Error setting public network configuration\n");
+      return 1;
+    }
+
+    if (0 != waitForNetwork(PATH_TO_SERIAL_PORT, 120)) {
+      printf("Error while waiting for network\n");
+      return 1;
+    }
+
+    return 0;
   }
 
-  if (0 != waitForConnection(PATH_TO_SERIAL_PORT, 120)) {
-    printf("Error while waiting for connection\n");
-    return 1;
-  }
-
-  if (0 != tcpipInit(PATH_TO_SERIAL_PORT)) {
-    printf("Error initiating TCP/IP context\nPowering off\n");
+  else if (0 == strcmp(argv[1], "--stop")) {
+    if (0 != mqttDisc(PATH_TO_SERIAL_PORT)) {
+      printf("Could not disconnect MQTT\n");
+    }
     if (0 != powerOff(PATH_TO_SERIAL_PORT, PATH_TO_GPIO_CHIP, PIN_NUM_STATUS,
                       PIN_NUM_PWR_KEY)) {
       printf("Error powering the module off\n");
       return 1;
     }
-    return 1;
+    return 0;
   }
 
-  if (0 != tcpipClose(PATH_TO_SERIAL_PORT)) {
-    printf("Error closing TCP/IP context\nPowering off\n");
-    if (0 != powerOff(PATH_TO_SERIAL_PORT, PATH_TO_GPIO_CHIP, PIN_NUM_STATUS,
-                      PIN_NUM_PWR_KEY)) {
-      printf("Error powering the module off\n");
+  else if (0 == strcmp(argv[1], "--mqttTest")) {
+
+    if (0 != mqttConn(PATH_TO_SERIAL_PORT, "io.adafruit.com", 8883, "kboz",
+                      "aio_eSpl61DrIZEisg3qXNN1NvMUSQdd")) {
+      printf("Error connecting MQTT\n");
       return 1;
     }
-    return 1;
+
+    /* if (0 != mqttConn(PATH_TO_SERIAL_PORT,
+                      "29038f72a9d84f18940e0d44daffa687.s2.eu.hivemq.cloud",
+                      8883, "rpi5gtn", "Raspi132.")) {
+      printf("Error connecting MQTT\n");
+      return 1;
+    } */
+
+    /* if (0 !=
+        mqttConn(PATH_TO_SERIAL_PORT, "broker.hivemq.com", 8883, NULL, NULL)) {
+      printf("Error connecting MQTT\n");
+      return 1;
+    } */
+
+    if (0 != mqttDisc(PATH_TO_SERIAL_PORT)) {
+      printf("Could not disconnect MQTT\n");
+      return 1;
+    }
+    return 0;
   }
 
-  if (0 != powerOff(PATH_TO_SERIAL_PORT, PATH_TO_GPIO_CHIP, PIN_NUM_STATUS,
-                    PIN_NUM_PWR_KEY)) {
-    printf("Error powering the module off\n");
+  else {
+    printf("Unknown arguments\n");
     return 1;
   }
-
-  return 0;
 }

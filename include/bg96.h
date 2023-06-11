@@ -5,12 +5,13 @@ int powerOn(char *pathToPort, char *pathToChip, int statusPin, int pwrKeyPin);
 
 int powerOff(char *pathToPort, char *pathToChip, int statusPin, int pwrKeyPin);
 
-int setupPublicConnection(char *pathToPort);
+int cfgPublicNetwork(char *pathToPort);
 
-int waitForConnection(char *pathToPort, int waitTimeSeconds);
+int waitForNetwork(char *pathToPort, int waitTimeSeconds);
 
-int tcpipInit(char *pathToPort);
+int mqttDisc(char *pathToPort);
 
-int tcpipClose(char *pathToPort);
+int mqttConn(char *pathToPort, char *hostURL, int hostPort, char *username,
+             char *password);
 
 #endif
