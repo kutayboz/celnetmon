@@ -73,6 +73,7 @@ int main(int argc, char **argv) {
     initNetworkData(nD);
     gatherData(nD, PATH_TO_SERIAL_PORT);
 
+    printf("Connecting to the MQTT broker\n");
     if (0 != mqttConn(PATH_TO_SERIAL_PORT, "io.adafruit.com", 8883, "kboz",
                       "aio_lvhz87FJ0rIlidH8g30V5mQ7FK7s")) {
       printf("Error connecting MQTT\n");
@@ -86,16 +87,19 @@ int main(int argc, char **argv) {
       return 1;
     } */
 
+    printf("Publishing network information\n");
     if (0 != mqttPubNetData(PATH_TO_SERIAL_PORT, *nD)) {
       printf("Error publishing to MQTT server\n");
       return 1;
     }
 
+    printf("Disconnecting from the MQTT broker\n");
     if (0 != mqttDisc(PATH_TO_SERIAL_PORT)) {
       printf("Could not disconnect MQTT\n");
       return 1;
     }
 
+    printf("Done\n");
     freeNetworkData(nD);
     free(nD);
     return 0;

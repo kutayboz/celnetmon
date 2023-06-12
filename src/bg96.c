@@ -434,10 +434,10 @@ int mqttPubNetData(char *pathToPort, networkData nD) {
 
   msgID = rand() % 65536;
   cmdStrLen = strlen("AT+QMTPUB=0") + (int)ceil(log10(msgID)) + 1 + 1 +
-              strlen("kboz/feeds/textInfo") + (int)ceil(log10(msgSize)) + 8;
+              strlen("kboz/feeds/textinfo") + (int)ceil(log10(msgSize)) + 8;
   command = realloc(command, sizeof(char) * (cmdStrLen + 1));
   snprintf(command, cmdStrLen + 1, "AT+QMTPUB=0,%d,1,0,\"%s\",%d", msgID,
-           "kboz/feeds/textInfo", msgSize);
+           "kboz/feeds/textinfo", msgSize);
   if (0 != querySerialPort(&response, serialPort, command, 15, (char *)-1)) {
     printf("Error querying publish command: %s\n", command);
     goto mqttPubError1;
