@@ -205,6 +205,144 @@ int cfgPublicNetwork(char *pathToPort) {
   return 0;
 }
 
+int cfg6GTN(char *pathToPort) {
+  unsigned long idx;
+  int serialPort;
+  char *response = malloc(sizeof(char)),
+       *cmdList[] = {"AT+QCFG=\"nwscanmode\",3,1",
+                     "AT+QCFG=\"iotopmode\",1,1",
+                     "AT+QCFG=\"band\",0,8000000,8000000,1",
+                     "AT+QCFG=\"servicedomain\",1,1",
+                     "AT+COPS=0,0",
+                     "AT+CEREG=2"};
+
+  serialPort = openSerialPort(pathToPort);
+  if (0 > serialPort) {
+    printf("Error opening serial port %s\n", pathToPort);
+    free(response);
+    return 1;
+  }
+
+  for (idx = 0; idx < sizeof(cmdList) / sizeof(*cmdList); idx++) {
+    if (0 != querySerialPort(&response, serialPort, cmdList[idx], 20, NULL)) {
+      printf("Error querySerialPort()\n");
+      close(serialPort);
+      free(response);
+      return 1;
+    }
+    if (NULL == strstr(response, "\r\nOK\r\n")) {
+      printf("Module responded not OK. Response:\n%s\n", response);
+      close(serialPort);
+      free(response);
+      return 1;
+    }
+  }
+
+  if (0 != querySerialPort(&response, serialPort, "AT+CPIN?", 2, NULL)) {
+    printf("Error querySerialPort()\n");
+    close(serialPort);
+    free(response);
+    return 1;
+  } else if (NULL == strstr(response, "+CPIN: READY")) {
+    printf("(U)SIM not ready\nResponse:\n%s\n", response);
+    close(serialPort);
+    free(response);
+    return 1;
+  }
+
+  if (0 != querySerialPort(&response, serialPort,
+                           "AT+QICSGP=1,1,\"5gtnouluiot\",\"\",\"\",0", 5,
+                           NULL)) {
+    printf("Error querySerialPort()\n");
+    close(serialPort);
+    free(response);
+    return 1;
+  }
+
+  if (0 != querySerialPort(&response, serialPort,
+                           "AT+CGDCONT=1,\"IP\",\"5gtnouluiot\"", 2, NULL)) {
+    printf("Error querySerialPort()\n");
+    close(serialPort);
+    free(response);
+    return 1;
+  }
+
+  close(serialPort);
+  free(response);
+  return 0;
+}
+
+int connect6GTN(char *pathToPort, int waitTimeSeconds) {
+  int serialPort, refreshPeriodSeconds = 1;
+  char *response = malloc(sizeof(char)), *responseCpy, *strPtr;
+  time_t startTime;
+
+  serialPort = openSerialPort(pathToPort);
+  if (0 > serialPort) {
+    printf("Error opening serial port %s\n", pathToPort);
+    free(response);
+    return 1;
+  }
+
+  if (0 != querySerialPort(&response, serialPort, "AT+COPS=1,2,\"24427\",9",
+                           180, NULL)) {
+    printf("Error querying AT+COPS=1\n");
+    close(serialPort);
+    free(response);
+    return 1;
+  }
+
+  if (0 != querySerialPort(&response, serialPort, "AT+CGATT=1", 140, NULL)) {
+    printf("Error querying AT+CGATT=1\n");
+    close(serialPort);
+    free(response);
+    return 1;
+  }
+
+  startTime = time(NULL);
+  do {
+    if (0 != querySerialPort(&response, serialPort, "AT+COPS?", 180, NULL)) {
+      printf("Error querySerialPort()\n");
+      close(serialPort);
+      free(response);
+      return 1;
+    }
+    strPtr = strstr(response, "+COPS: ");
+    if (waitTimeSeconds - (time(NULL) - startTime) < refreshPeriodSeconds) {
+      printf("Connection takes longer than %d seconds to initiate\n",
+             waitTimeSeconds);
+      close(serialPort);
+      free(response);
+      return 1;
+    }
+    sleep(refreshPeriodSeconds);
+  } while (!strchr(strPtr, ','));
+
+  responseCpy = malloc(sizeof(char));
+  startTime = time(NULL);
+  while (1) {
+    if (0 != querySerialPort(&response, serialPort, "AT+CEREG?", 2, NULL)) {
+      printf("Error querySerialPort()\n");
+      close(serialPort);
+      free(responseCpy);
+      free(response);
+      return 1;
+    }
+    responseCpy = realloc(responseCpy, sizeof(char) * (strlen(response) + 1));
+    strncpy(responseCpy, response, strlen(response) + 1);
+    strPtr = strtok(response, ",");
+    strPtr = strtok(NULL, ",");
+    if (NULL != strpbrk(strPtr, "15") || time(NULL) - startTime > 60)
+      break;
+    sleep(1);
+  }
+  free(responseCpy);
+
+  close(serialPort);
+  free(response);
+  return 0;
+}
+
 int waitForNetwork(char *pathToPort, int waitTimeSeconds) {
   int serialPort, refreshPeriodSeconds = 1;
   char *response = malloc(sizeof(char)), *responseCpy, *strPtr;

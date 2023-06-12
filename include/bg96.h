@@ -20,6 +20,10 @@ int powerOff(char *pathToPort, char *pathToChip, int statusPin, int pwrKeyPin);
 
 int cfgPublicNetwork(char *pathToPort);
 
+int cfg6GTN(char *pathToPort);
+
+int connect6GTN(char *pathToPort, int waitTimeSeconds);
+
 int waitForNetwork(char *pathToPort, int waitTimeSeconds);
 
 int mqttDisc(char *pathToPort);

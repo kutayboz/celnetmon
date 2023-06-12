@@ -12,29 +12,13 @@
 #define PIN_NUM_STATUS 27
 
 int main(int argc, char **argv) {
-  /* char *cmdList5GTNCfg[] = {"AT+QCFG=\"servicedomain\",1",
-                            "AT+QCFG=\"iotopmode\",1",
-                            "AT+QCFG=\"nwscanmode\",3",
-                            "AT+QCFG=\"band\",0,8000000,8000000,1",
-                            "AT+QICSGP=1,1,\"5gtnouluiot\",\"\",\"\",0",
-                            "AT+CGDCONT=1,\"IP\",\"5gtnouluiot\""},
-       *cmdList5GTNConnectAndPing[] = {
-           "AT+COPS=1,2,\"24427\",9",
-           "AT+CGATT=1",
-           "AT+QHTTPCFG=\"contextid\",1",
-           "AT+QHTTPCFG=\"responseheader\",1",
-           "AT+QICSGP=1,1,\"5gtnouluiot\",\"\",\"\",0",
-           "AT+QIACT=1",
-           "AT+QPING=1,\"https://www.google.fi\"",
-           "AT+QPING=1,\"www.google.fi\"",
-           "AT+QPING=1,\"8.8.8.8\""}; */
 
   if (argc == 1) {
     printf("No arguments provided\n");
     return 1;
   }
 
-  else if (0 == strcmp(argv[1], "--init")) {
+  else if (0 == strcmp(argv[1], "--initpublic")) {
 
     printf("Powering on\n");
     if (0 != powerOn(PATH_TO_SERIAL_PORT, PATH_TO_GPIO_CHIP, PIN_NUM_STATUS,
@@ -58,6 +42,37 @@ int main(int argc, char **argv) {
     printf("Waiting for establishing network connection\n");
     if (0 != waitForNetwork(PATH_TO_SERIAL_PORT, 120)) {
       printf("Error while waiting for network\n");
+      return 1;
+    }
+
+    printf("Initialization complete\n");
+    return 0;
+  }
+
+  else if (0 == strcmp(argv[1], "--init6GTN")) {
+
+    printf("Powering on\n");
+    if (0 != powerOn(PATH_TO_SERIAL_PORT, PATH_TO_GPIO_CHIP, PIN_NUM_STATUS,
+                     PIN_NUM_PWR_KEY)) {
+      printf("Error powering the module on\n");
+      return 1;
+    }
+
+    printf("Initiating GNSS\n");
+    if (0 != initGNSS(PATH_TO_SERIAL_PORT)) {
+      printf("Error initiating GNSS\n");
+      return 1;
+    }
+
+    printf("Configuring the network settings for 6GTN\n");
+    if (0 != cfg6GTN(PATH_TO_SERIAL_PORT)) {
+      printf("Error setting 6GTN network configuration\n");
+      return 1;
+    }
+
+    printf("Waiting for establishing network connection\n");
+    if (0 != connect6GTN(PATH_TO_SERIAL_PORT, 120)) {
+      printf("Error while connecting to 6GTN\n");
       return 1;
     }
 
@@ -104,13 +119,6 @@ int main(int argc, char **argv) {
       goto netinfopubFail;
     }
 
-    /* if (0 != mqttConn(PATH_TO_SERIAL_PORT,
-                      "29038f72a9d84f18940e0d44daffa687.s2.eu.hivemq.cloud",
-                      8883, "rpi5gtn", "Raspi132.")) {
-      printf("Error connecting MQTT\n");
-      goto netinfopubFail;
-    } */
-
     printf("Publishing network information\n");
     if (0 != mqttPubNetData(PATH_TO_SERIAL_PORT, *nD)) {
       printf("Error publishing to MQTT server\n");
@@ -123,7 +131,7 @@ int main(int argc, char **argv) {
       goto netinfopubFail;
     }
 
-    printf("Network info published\n");
+    printf("Network info publish complete\n");
     freeNetworkData(nD);
     free(nD);
     return 0;
