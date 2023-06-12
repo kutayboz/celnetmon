@@ -80,9 +80,15 @@ int main(int argc, char **argv) {
   }
 
   else if (0 == strcmp(argv[1], "--mqttTest")) {
+    struct networkData *nD = malloc(sizeof(struct networkData));
+
+    initNetworkData(nD);
+    gatherData(nD, PATH_TO_SERIAL_PORT);
+    freeNetworkData(nD);
+    free(nD);
 
     if (0 != mqttConn(PATH_TO_SERIAL_PORT, "io.adafruit.com", 8883, "kboz",
-                      "aio_eSpl61DrIZEisg3qXNN1NvMUSQdd")) {
+                      "aio_lvhz87FJ0rIlidH8g30V5mQ7FK7s")) {
       printf("Error connecting MQTT\n");
       return 1;
     }
@@ -94,16 +100,20 @@ int main(int argc, char **argv) {
       return 1;
     } */
 
-    /* if (0 !=
-        mqttConn(PATH_TO_SERIAL_PORT, "broker.hivemq.com", 8883, NULL, NULL)) {
-      printf("Error connecting MQTT\n");
+    if (0 !=
+        mqttPub(
+            PATH_TO_SERIAL_PORT, "kboz/feeds/numdata",
+            "{\"value\": {\"sensor-1\":22.587,\"sensor-2\":13.182},\"lat\": "
+            "38.1123,\"lon\": -91.2325,\"ele\": 112}")) {
+      printf("Error publishing to MQTT server\n");
       return 1;
-    } */
+    }
 
     if (0 != mqttDisc(PATH_TO_SERIAL_PORT)) {
       printf("Could not disconnect MQTT\n");
       return 1;
     }
+
     return 0;
   }
 

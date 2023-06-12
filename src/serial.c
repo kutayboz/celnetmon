@@ -9,8 +9,6 @@
 
 #define BUFFER_SIZE sizeof(char) * 256
 
-typedef enum { SUCCESS, ERROR_READ, ERROR_TIMEOUT } SERIAL_RETURN_CODE;
-
 int openSerialPort(char pathToPort[]) {
 
   static int serialPort;
@@ -59,13 +57,13 @@ int openSerialPort(char pathToPort[]) {
   return serialPort;
 }
 
-SERIAL_RETURN_CODE querySerialPort(char **output, int serialPort, char *input,
-                                   int timeoutSeconds, char *lastLineSubStr) {
+int querySerialPort(char **output, int serialPort, char *input,
+                    int timeoutSeconds, char *lastLineSubStr) {
 
   time_t timeStart;
   unsigned long idx;
   int bytesRead, isEnd, beforeLength;
-  SERIAL_RETURN_CODE returnCode;
+  int returnCode;
   char *txBuffer, *buffer = malloc(BUFFER_SIZE);
   const char *responseCodes[8] = {"\r\nOK\r\n",    "\r\nCONNECT\r\n",
                                   "\r\nRING\r\n",  "\r\nNO CARRIER\r\n",
@@ -86,13 +84,13 @@ SERIAL_RETURN_CODE querySerialPort(char **output, int serialPort, char *input,
   *output = realloc(*output, sizeof(char));
   **output = '\0';
   bytesRead = 0;
-  returnCode = isEnd = SUCCESS;
+  returnCode = isEnd = 0;
   timeStart = time(NULL);
   while (!isEnd) {
     bytesRead = read(serialPort, buffer, BUFFER_SIZE);
     if (bytesRead < 0) {
       printf("Error reading serial port\n");
-      returnCode = ERROR_READ;
+      returnCode = 1;
       break;
     }
 
@@ -102,12 +100,16 @@ SERIAL_RETURN_CODE querySerialPort(char **output, int serialPort, char *input,
       memcpy(*output + beforeLength, buffer, bytesRead);
       (*output)[beforeLength + (bytesRead / sizeof(char))] = '\0';
       if (lastLineSubStr != NULL) {
-        if (strstr(*output, lastLineSubStr) &&
-            0 == strcmp(
-                     &(*output)[beforeLength + (bytesRead / sizeof(char)) - 2],
-                     "\r\n")) {
-          isEnd = 1;
+        if (lastLineSubStr == (char *)-1) {
+          if (NULL != strstr(*output, "\r\n> ")) {
+            break;
+          }
+        } else if (strstr(*output, lastLineSubStr) &&
+                   0 == strcmp(&(*output)[beforeLength +
+                                          (bytesRead / sizeof(char)) - 2],
+                               "\r\n")) {
           break;
+        } else if (lastLineSubStr == (char *)-1) {
         }
       } else {
         for (idx = 0; idx < sizeof(responseCodes) / sizeof(*responseCodes);
@@ -120,7 +122,7 @@ SERIAL_RETURN_CODE querySerialPort(char **output, int serialPort, char *input,
       }
     } else if (bytesRead == 0 && time(NULL) - timeStart > timeoutSeconds) {
       printf("Response timeout after %d seconds\n", timeoutSeconds);
-      returnCode = ERROR_TIMEOUT;
+      returnCode = 1;
       break;
     }
   }

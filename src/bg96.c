@@ -1,11 +1,35 @@
+#include "bg96.h"
 #include "gpio.h"
 #include "serial.h"
+#include <inttypes.h>
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
 #include <unistd.h>
+
+int initNetworkData(struct networkData *nD) {
+  nD->operatorName = malloc(sizeof(char));
+  nD->currentTech = malloc(sizeof(char));
+  nD->networkRegStat = malloc(sizeof(char));
+  nD->trkAreaCode = malloc(sizeof(char));
+  nD->cellID = malloc(sizeof(char));
+  nD->rssi = malloc(sizeof(char));
+  nD->ber = malloc(sizeof(char));
+  return 0;
+}
+
+int freeNetworkData(struct networkData *nD) {
+  free(nD->operatorName);
+  free(nD->currentTech);
+  free(nD->networkRegStat);
+  free(nD->trkAreaCode);
+  free(nD->cellID);
+  free(nD->rssi);
+  free(nD->ber);
+  return 0;
+}
 
 int powerOn(char *pathToPort, char *pathToChip, int statusPin, int pwrKeyPin) {
   int moduleStatus, serialPort;
@@ -110,9 +134,12 @@ int cfgPublicNetwork(char *pathToPort) {
   unsigned long idx;
   int serialPort;
   char *response = malloc(sizeof(char)),
-       *cmdList[] = {"AT+QCFG=\"nwscanmode\",3,1", "AT+QCFG=\"iotopmode\",1,1",
+       *cmdList[] = {"AT+QCFG=\"nwscanmode\",3,1",
+                     "AT+QCFG=\"iotopmode\",1,1",
                      "AT+QCFG=\"band\",F,400A0E189F,A0E189F,1",
-                     "AT+QCFG=\"servicedomain\",1,1", "AT+COPS=0"};
+                     "AT+QCFG=\"servicedomain\",1,1",
+                     "AT+COPS=0,0",
+                     "AT+CEREG=2"};
 
   serialPort = openSerialPort(pathToPort);
   if (0 > serialPort) {
@@ -267,10 +294,9 @@ int mqttDisc(char *pathToPort) {
 
 int mqttConn(char *pathToPort, char *hostURL, int hostPort, char *username,
              char *password) {
-  int serialPort, cmdStrLen, msgID, msgSize;
+  int serialPort, cmdStrLen;
   unsigned long idx;
-  char *response = malloc(sizeof(char)), *command, clientID[11],
-       topic[] = "kboz/feeds/numdata", msg[] = "0";
+  char *response = malloc(sizeof(char)), *command, clientID[11];
 
   srand(time(NULL));
   for (idx = 0; idx < sizeof(clientID) - 1; idx++) {
@@ -281,44 +307,43 @@ int mqttConn(char *pathToPort, char *hostURL, int hostPort, char *username,
   serialPort = openSerialPort(pathToPort);
   if (0 > serialPort) {
     printf("Error opening serial port %s\n", pathToPort);
-    goto mqttConnError4;
+    goto mqttConnError3;
   }
 
-  if (SUCCESS != querySerialPort(&response, serialPort,
-                                 "AT+QMTCFG=\"version\",0,4", 2, NULL)) {
+  if (0 != querySerialPort(&response, serialPort, "AT+QMTCFG=\"version\",0,4",
+                           2, NULL)) {
     printf("Error querying AT+QMTCFG=\"version\",0,4\n");
-    goto mqttConnError3;
+    goto mqttConnError2;
   }
 
-  if (SUCCESS != querySerialPort(&response, serialPort,
-                                 "AT+QMTCFG=\"pdpcid\",0,1", 2, NULL)) {
+  if (0 != querySerialPort(&response, serialPort, "AT+QMTCFG=\"pdpcid\",0,1", 2,
+                           NULL)) {
     printf("Error querying AT+QMTCFG=\"pdpcid\",0,1\n");
-    goto mqttConnError3;
+    goto mqttConnError2;
   }
 
-  if (SUCCESS != querySerialPort(&response, serialPort,
-                                 "AT+QMTCFG=\"timeout\",0,5,3,0", 2, NULL)) {
+  if (0 != querySerialPort(&response, serialPort,
+                           "AT+QMTCFG=\"timeout\",0,5,3,0", 2, NULL)) {
     printf("Error configuring MQTT package timeout\n");
-    goto mqttConnError3;
+    goto mqttConnError2;
   }
 
-  if (SUCCESS != querySerialPort(&response, serialPort,
-                                 "AT+QMTCFG=\"ssl\",0,1,0", 2, NULL)) {
+  if (0 != querySerialPort(&response, serialPort, "AT+QMTCFG=\"ssl\",0,1,0", 2,
+                           NULL)) {
     printf("Error querying AT+QMTCFG=\"ssl\",0,1,0\n");
-    goto mqttConnError3;
+    goto mqttConnError2;
   }
 
   cmdStrLen = strlen("AT+QMTOPEN=0") + strlen(hostURL) +
               (int)(1 + ceil(log10(hostPort))) + 5;
   command = malloc(sizeof(char) * (cmdStrLen));
   snprintf(command, cmdStrLen - 1, "AT+QMTOPEN=0,\"%s\",%d", hostURL, hostPort);
-  if (SUCCESS !=
-      querySerialPort(&response, serialPort, command, 75, "+QMTOPEN:")) {
+  if (0 != querySerialPort(&response, serialPort, command, 75, "+QMTOPEN:")) {
     printf("Error querying %s\n", command);
-    goto mqttConnError2;
+    goto mqttConnError1;
   } else if (NULL == strstr(response, "+QMTOPEN: 0,0")) {
     printf("Failed to establish network for MQTT connection\n");
-    goto mqttConnError2;
+    goto mqttConnError1;
   }
 
   if (username == NULL) {
@@ -338,8 +363,7 @@ int mqttConn(char *pathToPort, char *hostURL, int hostPort, char *username,
     snprintf(command, cmdStrLen + 1, "AT+QMTCONN=0,\"%s\",\"%s\",\"%s\"",
              clientID, username, password);
   }
-  if (SUCCESS !=
-      querySerialPort(&response, serialPort, command, 70, "\r\n+QMT")) {
+  if (0 != querySerialPort(&response, serialPort, command, 70, "\r\n+QMT")) {
     printf("Failed to query %s", command);
     goto mqttConnError1;
   } else if (NULL == strstr(response, "\r\nOK\r\n")) {
@@ -347,25 +371,9 @@ int mqttConn(char *pathToPort, char *hostURL, int hostPort, char *username,
     goto mqttConnError1;
   } else if (NULL != strstr(response, "+QMTSTAT:")) {
     printf("Dropped from network. Response:\n%s\n", response);
-    goto mqttConnError2;
+    goto mqttConnError1;
   } else if (NULL == strstr(response, "+QMTCONN: 0,0")) {
     printf("Failed to establish connection. Response:\n%s\n", response);
-    goto mqttConnError1;
-  }
-
-  msgSize = sizeof(char) * strlen(msg);
-  msgID = rand() % 65536;
-  cmdStrLen = strlen("AT+QMTPUB=0") + (int)ceil(log10(msgID)) + 1 + 1 +
-              strlen(topic) + (int)ceil(log10(msgSize)) + 8;
-  command = realloc(command, sizeof(char) * (cmdStrLen + 1));
-  snprintf(command, cmdStrLen + 1, "AT+QMTPUB=0,%d,1,0,\"%s\",%d", msgID, topic,
-           msgSize);
-  if (SUCCESS != querySerialPort(&response, serialPort, command, 15, "\r\n>")) {
-    printf("Error publishing\n");
-    goto mqttConnError1;
-  } else if (SUCCESS !=
-             querySerialPort(&response, serialPort, msg, 15, "\r\n+QMTPUB:")) {
-    printf("Error publishing\n");
     goto mqttConnError1;
   }
 
@@ -376,17 +384,175 @@ int mqttConn(char *pathToPort, char *hostURL, int hostPort, char *username,
 
 mqttConnError1:
   free(command);
+mqttConnError2:
+  close(serialPort);
+mqttConnError3:
+  free(response);
+  return 1;
+}
+
+int mqttPub(char *pathToPort, char *topic, char *msg) {
+  int serialPort, cmdStrLen, msgID, msgSize;
+  char *response = malloc(sizeof(char)), *command;
+
+  serialPort = openSerialPort(pathToPort);
+  if (0 > serialPort) {
+    printf("Error opening serial port %s\n", pathToPort);
+    goto mqttPubError2;
+  }
+
+  msgSize = sizeof(char) * strlen(msg);
+  msgID = rand() % 65536;
+  cmdStrLen = strlen("AT+QMTPUB=0") + (int)ceil(log10(msgID)) + 1 + 1 +
+              strlen(topic) + (int)ceil(log10(msgSize)) + 8;
+  command = malloc(sizeof(char) * (cmdStrLen + 1));
+  snprintf(command, cmdStrLen + 1, "AT+QMTPUB=0,%d,1,0,\"%s\",%d", msgID, topic,
+           msgSize);
+  if (0 != querySerialPort(&response, serialPort, command, 15, (char *)-1)) {
+    printf("Error querying publish command: %s\n", command);
+    goto mqttPubError1;
+  } else if (0 !=
+             querySerialPort(&response, serialPort, msg, 15, "\r\n+QMTPUB:")) {
+    printf("Error querying publish message\n");
+    goto mqttPubError1;
+  }
+
+  free(command);
+  free(response);
+  close(serialPort);
+  return 0;
+
+mqttPubError1:
+  free(command);
+  free(response);
+mqttPubError2:
+  close(serialPort);
+  return 1;
+}
+
+int gatherData(struct networkData *output, char *pathToPort) {
+  int serialPort, strLen, tmpNum;
+  char *response = malloc(sizeof(char)), *varPtr;
+  /* char *commandList[] = {"AT+COPS?",
+                         "AT+CEREG?",
+                         "AT+CSQ",
+                         "AT+QLTS=1",
+                         "AT+QNWINFO",
+                         "AT+QCSQ",
+                         "AT+QSPN",
+                         "AT+CCLK?"}; */
+
+  serialPort = openSerialPort(pathToPort);
+  if (0 > serialPort) {
+    printf("Error opening serial port %s\n", pathToPort);
+    goto gatherDataError2;
+  }
+
+  if (0 != querySerialPort(&response, serialPort, "AT+COPS?", 1, NULL)) {
+    printf("Error querying AT+COPS?\n");
+    goto gatherDataError1;
+  }
+  varPtr = strtok(response, ",\r");
+  while (strstr(varPtr, "\n+COPS:") == NULL) {
+    varPtr = strtok(NULL, ",\r");
+  }
+  varPtr = strtok(NULL, ",\r");
+  varPtr = strtok(NULL, ",\r");
+  strLen = strlen(varPtr) + 1;
+  output->operatorName = realloc(output->operatorName, sizeof(char) * strLen);
+  strncpy(output->operatorName, varPtr, strLen);
+  varPtr = strtok(NULL, "\",\r");
+  switch (*varPtr) {
+  case '0':
+    strLen = strlen("GSM") + 1;
+    output->currentTech = realloc(output->currentTech, sizeof(char) * strLen);
+    strncpy(output->currentTech, "GSM", strLen);
+    break;
+
+  case '8':
+    strLen = strlen("LTE Cat M1") + 1;
+    output->currentTech = realloc(output->currentTech, sizeof(char) * strLen);
+    strncpy(output->currentTech, "LTE Cat M1", strLen);
+    break;
+
+  case '9':
+    strLen = strlen("LTE Cat NB1") + 1;
+    output->currentTech = realloc(output->currentTech, sizeof(char) * strLen);
+    strncpy(output->currentTech, "LTE Cat NB1", strLen);
+    break;
+  }
+
+  if (0 != querySerialPort(&response, serialPort, "AT+CEREG?", 1, NULL)) {
+    printf("Error querying AT+CEREG?\n");
+    goto gatherDataError1;
+  }
+  varPtr = strtok(response, ",\r");
+  while (strstr(varPtr, "\n+CEREG:") == NULL) {
+    varPtr = strtok(NULL, ",\r");
+  }
+  varPtr = strtok(NULL, ",\r");
+  switch (*varPtr) {
+  case '1':
+    strLen = strlen("Not roaming") + 1;
+    output->networkRegStat =
+        realloc(output->networkRegStat, sizeof(char) * strLen);
+    strncpy(output->networkRegStat, "Not roaming", strLen);
+    break;
+
+  case '5':
+    strLen = strlen("Roaming") + 1;
+    output->networkRegStat =
+        realloc(output->networkRegStat, sizeof(char) * strLen);
+    strncpy(output->networkRegStat, "Roaming", strLen);
+    break;
+  }
+  varPtr = strtok(NULL, "\",\r");
+  strLen = strlen(varPtr) + 1;
+  output->trkAreaCode = realloc(output->trkAreaCode, sizeof(char) * strLen);
+  strncpy(output->trkAreaCode, varPtr, strLen);
+  varPtr = strtok(NULL, "\",\r");
+  strLen = strlen(varPtr) + 1;
+  output->cellID = realloc(output->cellID, sizeof(char) * strLen);
+  strncpy(output->cellID, varPtr, strLen);
+
+  if (0 != querySerialPort(&response, serialPort, "AT+CSQ", 1, NULL)) {
+    printf("Error querying AT+CSQ\n");
+    goto gatherDataError1;
+  }
+  varPtr = strtok(response, ",\r");
+  while (strstr(varPtr, "\n+CSQ:") == NULL) {
+    varPtr = strtok(NULL, " ,\r");
+  }
+  varPtr = strtok(NULL, " ,\r");
+  if (0 == strcmp(varPtr, "99")) {
+    strLen = strlen("unknown") + 1;
+    output->rssi = realloc(output->rssi, sizeof(char) * strLen);
+    strncpy(output->rssi, "unknown", strLen);
+  } else {
+    tmpNum = (2 * strtoimax(varPtr, NULL, 10) - 113);
+    strLen = 5;
+    output->rssi = realloc(output->rssi, sizeof(char) * strLen);
+    snprintf(output->rssi, strLen * sizeof(char), "%d", tmpNum);
+  }
+  varPtr = strtok(NULL, " ,\r");
+  if (0 == strcmp(varPtr, "99")) {
+    strLen = strlen("unknown") + 1;
+    output->ber = realloc(output->ber, sizeof(char) * strLen);
+    strncpy(output->ber, "unknown", strLen);
+  } else {
+    tmpNum = exp2(strtoimax(varPtr, NULL, 10));
+    strLen = 7;
+    output->ber = realloc(output->ber, sizeof(char) * strLen);
+    snprintf(output->ber, strLen * sizeof(char), "%f.2%%", 0.14 * tmpNum);
+  }
+
   close(serialPort);
   free(response);
-  if (0 != mqttDisc(pathToPort)) {
-    printf("Could not close network for MQTT. Reboot advised\n");
-  }
-  return 1;
-mqttConnError2:
-  free(command);
-mqttConnError3:
+  return 0;
+
+gatherDataError1:
   close(serialPort);
-mqttConnError4:
+gatherDataError2:
   free(response);
   return 1;
 }
