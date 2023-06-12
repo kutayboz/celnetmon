@@ -23,6 +23,10 @@ int initNetworkData(networkData *nD) {
   nD->sinr = calloc(1, sizeof(char));
   nD->rsrq = calloc(1, sizeof(char));
   nD->ber = calloc(1, sizeof(char));
+  nD->lat = calloc(1, sizeof(char));
+  nD->longt = calloc(1, sizeof(char));
+  nD->alt = calloc(1, sizeof(char));
+  nD->gpsTime = calloc(1, sizeof(char));
   return 0;
 }
 
@@ -40,6 +44,10 @@ int freeNetworkData(networkData *nD) {
   free(nD->sinr);
   free(nD->rsrq);
   free(nD->ber);
+  free(nD->lat);
+  free(nD->longt);
+  free(nD->alt);
+  free(nD->gpsTime);
   return 0;
 }
 
@@ -403,26 +411,31 @@ mqttConnError3:
 int mqttPubNetData(char *pathToPort, networkData nD) {
   int serialPort, cmdStrLen, msgID, msgSize;
   char *response = malloc(sizeof(char)), *command = malloc(sizeof(char)),
-       *msg = malloc(sizeof(char));
+       *msg = malloc(sizeof(char)),
+       textDataTemplate[] = "Operator: %s\n"
+                            "Network: %s\n"
+                            "Reg Status: %s\n"
+                            "Tracking Area Code: %s\n"
+                            "Cell ID: %s\n"
+                            "Technology: %s\n"
+                            "Band: %s\n"
+                            "Channel: %s\n"
+                            "Network Time (GMT): %s",
+       jsonTemplate[] = "{\n"
+                        "\t\"value\": %s,\n"
+                        "\t\"lat\": %s,\n"
+                        "\t\"lon\": %s,\n"
+                        "\t\"ele\": %s\n"
+                        "}";
 
-  char template[] = "Operator: %s\n"
-                    "Network: %s\n"
-                    "Reg Status: %s\n"
-                    "Tracking Area Code: %s\n"
-                    "Cell ID: %s\n"
-                    "Technology: %s\n"
-                    "Band: %s\n"
-                    "Channel: %s\n"
-                    "Network Time (GMT): %s";
-
-  msgSize = sizeof(char) * (strlen(template) + strlen(nD.operatorName) +
+  msgSize = sizeof(char) * (strlen(textDataTemplate) + strlen(nD.operatorName) +
                             strlen(nD.networkName) + strlen(nD.networkRegStat) +
                             strlen(nD.trkAreaCode) + strlen(nD.cellID) +
                             strlen(nD.tech) + strlen(nD.band) +
                             strlen(nD.channel) + strlen(asctime(&nD.netTime)) +
                             1 - 9 * 2); /* REMOVE THE EXTRA %s FROM TEMPLATE */
   msg = realloc(msg, msgSize);
-  snprintf(msg, msgSize / sizeof(char), template, nD.operatorName,
+  snprintf(msg, msgSize / sizeof(char), textDataTemplate, nD.operatorName,
            nD.networkName, nD.networkRegStat, nD.trkAreaCode, nD.cellID,
            nD.tech, nD.band, nD.channel, asctime(&nD.netTime));
 
@@ -528,6 +541,29 @@ int mqttPubNetData(char *pathToPort, networkData nD) {
   command = realloc(command, sizeof(char) * (cmdStrLen + 1));
   snprintf(command, cmdStrLen + 1, "AT+QMTPUB=0,%d,1,0,\"%s\",%d", msgID,
            "kboz/feeds/ber", msgSize);
+  if (0 != querySerialPort(&response, serialPort, command, 15, (char *)-1)) {
+    printf("Error querying publish command: %s\n", command);
+    goto mqttPubError1;
+  } else if (0 !=
+             querySerialPort(&response, serialPort, msg, 15, "\r\n+QMTPUB:")) {
+    printf("Error querying publish message\n");
+    goto mqttPubError1;
+  }
+
+  msgSize =
+      sizeof(char) * (strlen(jsonTemplate) + strlen(nD.lat) + strlen(nD.longt) +
+                      strlen(nD.alt) + strlen(nD.gpsTime) + 1 -
+                      4 * 2); /* REMOVE THE EXTRA %s FROM TEMPLATE */
+  msg = realloc(msg, msgSize);
+  snprintf(msg, msgSize / sizeof(char), jsonTemplate, nD.gpsTime, nD.lat,
+           nD.longt, nD.alt);
+
+  msgID = rand() % 65536;
+  cmdStrLen = strlen("AT+QMTPUB=0") + (int)ceil(log10(msgID)) + 1 + 1 +
+              strlen("kboz/feeds/gpsdata/json") + (int)ceil(log10(msgSize)) + 8;
+  command = realloc(command, sizeof(char) * (cmdStrLen + 1));
+  snprintf(command, cmdStrLen + 1, "AT+QMTPUB=0,%d,1,0,\"%s\",%d", msgID,
+           "kboz/feeds/gpsdata/json", msgSize);
   if (0 != querySerialPort(&response, serialPort, command, 15, (char *)-1)) {
     printf("Error querying publish command: %s\n", command);
     goto mqttPubError1;
@@ -736,6 +772,46 @@ int gatherData(networkData *output, char *pathToPort) {
     }
   }
 
+  if (0 != querySerialPort(&response, serialPort, "AT+QGPSLOC=2", 5, NULL)) {
+    printf("Error querying AT+QGPSLOC. Response:\n%s\n", response);
+    strLen = strlen("NULL") + 1;
+    output->lat = realloc(output->lat, sizeof(char) * strLen);
+    output->longt = realloc(output->longt, sizeof(char) * strLen);
+    output->alt = realloc(output->alt, sizeof(char) * strLen);
+    output->gpsTime = realloc(output->gpsTime, sizeof(char) * strLen);
+    strncpy(output->lat, "NULL", strLen);
+    strncpy(output->longt, "NULL", strLen);
+    strncpy(output->alt, "NULL", strLen);
+    strncpy(output->gpsTime, "NULL", strLen);
+  } else {
+    varPtr = strtok(response, " \",\r");
+    while (strstr(varPtr, "\n+QGPSLOC:") == NULL) {
+      varPtr = strtok(NULL, " \",\r");
+    }
+    varPtr = strtok(NULL, " \",\r");
+    varPtr = strtok(NULL, " \",\r");
+    strLen = strlen(varPtr) + 1;
+    output->lat = realloc(output->lat, sizeof(char) * strLen);
+    strncpy(output->lat, varPtr, strLen);
+    varPtr = strtok(NULL, " \",\r");
+    strLen = strlen(varPtr) + 1;
+    output->longt = realloc(output->longt, sizeof(char) * strLen);
+    strncpy(output->longt, varPtr, strLen);
+    varPtr = strtok(NULL, " \",\r");
+    varPtr = strtok(NULL, " \",\r");
+    strLen = strlen(varPtr) + 1;
+    output->alt = realloc(output->alt, sizeof(char) * strLen);
+    strncpy(output->alt, varPtr, strLen);
+    varPtr = strtok(NULL, " \",\r");
+    varPtr = strtok(NULL, " \",\r");
+    varPtr = strtok(NULL, " \",\r");
+    varPtr = strtok(NULL, " \",\r");
+    varPtr = strtok(NULL, " \",\r");
+    strLen = strlen(varPtr) + 1;
+    output->gpsTime = realloc(output->gpsTime, sizeof(char) * strLen);
+    strncpy(output->gpsTime, varPtr, strLen);
+  }
+
   close(serialPort);
   free(response);
   return 0;
@@ -743,6 +819,71 @@ int gatherData(networkData *output, char *pathToPort) {
 gatherDataError1:
   close(serialPort);
 gatherDataError2:
+  free(response);
+  return 1;
+}
+
+int initGNSS(char *pathToPort) {
+  char *response = malloc(sizeof(char));
+  int serialPort;
+
+  serialPort = openSerialPort(pathToPort);
+  if (0 > serialPort) {
+    printf("Error opening serial port %s\n", pathToPort);
+    goto initGNSSError2;
+  }
+
+  if (0 != querySerialPort(&response, serialPort,
+                           "AT+QGPSCFG=\"outport\",\"none\"", 1, NULL)) {
+    printf("Error querying AT+QGPSCFG\n");
+    goto initGNSSError1;
+  }
+
+  if (0 != querySerialPort(&response, serialPort, "AT+QGPSCFG=\"gnssconfig\",1",
+                           1, NULL)) {
+    printf("Error querying AT+QGPSCFG\n");
+    goto initGNSSError1;
+  }
+
+  if (0 !=
+      querySerialPort(&response, serialPort, "AT+QGPS=1,30,50,0,1", 5, NULL)) {
+    printf("Error querying AT+QGPS\n");
+    goto initGNSSError1;
+  }
+
+  close(serialPort);
+  free(response);
+  return 0;
+
+initGNSSError1:
+  close(serialPort);
+initGNSSError2:
+  free(response);
+  return 1;
+}
+
+int stopGNSS(char *pathToPort) {
+  char *response = malloc(sizeof(char));
+  int serialPort;
+
+  serialPort = openSerialPort(pathToPort);
+  if (0 > serialPort) {
+    printf("Error opening serial port %s\n", pathToPort);
+    goto initGNSSError2;
+  }
+
+  if (0 != querySerialPort(&response, serialPort, "AT+QGPSEND", 1, NULL)) {
+    printf("Error querying AT+QGPSEND\n");
+    goto initGNSSError1;
+  }
+
+  close(serialPort);
+  free(response);
+  return 0;
+
+initGNSSError1:
+  close(serialPort);
+initGNSSError2:
   free(response);
   return 1;
 }

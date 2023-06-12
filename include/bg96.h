@@ -5,7 +5,8 @@
 
 typedef struct networkDataTag {
   char *operatorName, *networkName, *networkRegStat, *trkAreaCode, *cellID,
-      *tech, *band, *channel, *rssi, *rsrp, *sinr, *rsrq, *ber;
+      *tech, *band, *channel, *rssi, *rsrp, *sinr, *rsrq, *ber, *lat, *longt,
+      *alt, *gpsTime;
   struct tm netTime;
 } networkData;
 
@@ -29,5 +30,9 @@ int mqttConn(char *pathToPort, char *hostURL, int hostPort, char *username,
 int mqttPubNetData(char *pathToPort, networkData nD);
 
 int gatherData(networkData *output, char *pathToPort);
+
+int initGNSS(char *pathToPort);
+
+int stopGNSS(char *pathToPort);
 
 #endif
