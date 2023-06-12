@@ -566,12 +566,12 @@ int gatherData(networkData *output, char *pathToPort) {
     printf("Error querying AT+COPS?\n");
     goto gatherDataError1;
   }
-  varPtr = strtok(response, ",\r");
+  varPtr = strtok(response, "\",\r");
   while (strstr(varPtr, "\n+COPS:") == NULL) {
-    varPtr = strtok(NULL, ",\r");
+    varPtr = strtok(NULL, "\",\r");
   }
-  varPtr = strtok(NULL, ",\r");
-  varPtr = strtok(NULL, ",\r");
+  varPtr = strtok(NULL, "\",\r");
+  varPtr = strtok(NULL, "\",\r");
   strLen = strlen(varPtr) + 1;
   output->operatorName = realloc(output->operatorName, sizeof(char) * strLen);
   strncpy(output->operatorName, varPtr, strLen);
@@ -718,9 +718,9 @@ int gatherData(networkData *output, char *pathToPort) {
       output->rsrp = realloc(output->rsrp, sizeof(char) * strLen);
       strncpy(output->rsrp, varPtr, strLen);
       varPtr = strtok(NULL, " \",\r");
-      strLen = strlen(varPtr) + 1;
+      strLen = 7;
       output->sinr = realloc(output->sinr, sizeof(char) * strLen);
-      strncpy(output->sinr, varPtr, strLen);
+      snprintf(output->sinr, 7, "%3.2f", (strtof(varPtr, NULL) - 100) / 5);
       varPtr = strtok(NULL, " \",\r");
       strLen = strlen(varPtr) + 1;
       output->rsrq = realloc(output->rsrq, sizeof(char) * strLen);
