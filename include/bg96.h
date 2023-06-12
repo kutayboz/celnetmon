@@ -1,19 +1,17 @@
 #ifndef __INCLUDE_BG96__
 #define __INCLUDE_BG96__
 
-struct networkData {
-  char *operatorName;
-  char *currentTech;
-  char *networkRegStat;
-  char *trkAreaCode;
-  char *cellID;
-  char *rssi;
-  char *ber;
-};
+#include <time.h>
 
-int initNetworkData(struct networkData *nD);
+typedef struct networkDataTag {
+  char *operatorName, *networkName, *networkRegStat, *trkAreaCode, *cellID,
+      *tech, *band, *channel, *rssi, *rsrp, *sinr, *rsrq, *ber;
+  struct tm netTime;
+} networkData;
 
-int freeNetworkData(struct networkData *nD);
+int initNetworkData(networkData *nD);
+
+int freeNetworkData(networkData *nD);
 
 int powerOn(char *pathToPort, char *pathToChip, int statusPin, int pwrKeyPin);
 
@@ -28,8 +26,8 @@ int mqttDisc(char *pathToPort);
 int mqttConn(char *pathToPort, char *hostURL, int hostPort, char *username,
              char *password);
 
-int mqttPub(char *pathToPort, char *topic, char *msg);
+int mqttPubNetData(char *pathToPort, networkData nD);
 
-int gatherData(struct networkData *output, char *pathToPort);
+int gatherData(networkData *output, char *pathToPort);
 
 #endif
