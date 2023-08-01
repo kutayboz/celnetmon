@@ -10,6 +10,8 @@ typedef struct networkDataTag {
   struct tm netTime;
 } networkData;
 
+int modemPowerToggle(char *pathToChip, int pinNum);
+
 int initNetworkData(networkData *nD);
 
 int freeNetworkData(networkData *nD);
