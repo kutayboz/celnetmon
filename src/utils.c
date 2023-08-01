@@ -76,7 +76,7 @@ int readCfg(struct structCfg *dataCfg, const char *pathExe) {
   rewind(fileCfg);
   do {
     fgets(strBuffer, BUFSIZ, fileCfg);
-    tmpPtr = strtok(strBuffer, " =\n\t\r\"");
+    tmpPtr = strtok(strBuffer, " =\n\t\r");
     if (tmpPtr == NULL)
       continue;
     if (strcmp("path_to_serial_port", tmpPtr) != 0)
@@ -100,7 +100,7 @@ int readCfg(struct structCfg *dataCfg, const char *pathExe) {
   rewind(fileCfg);
   do {
     fgets(strBuffer, BUFSIZ, fileCfg);
-    tmpPtr = strtok(strBuffer, " =\n\t\r\"");
+    tmpPtr = strtok(strBuffer, " =\n\t\r");
     if (tmpPtr == NULL)
       continue;
     if (strcmp("path_to_gpio_chip", tmpPtr) != 0)
@@ -124,7 +124,7 @@ int readCfg(struct structCfg *dataCfg, const char *pathExe) {
   rewind(fileCfg);
   do {
     fgets(strBuffer, BUFSIZ, fileCfg);
-    tmpPtr = strtok(strBuffer, " =\n\t\r\"");
+    tmpPtr = strtok(strBuffer, " =\n\t\r");
     if (tmpPtr == NULL)
       continue;
     if (strcmp("pin_pwr_key", tmpPtr) != 0)
@@ -151,7 +151,7 @@ int readCfg(struct structCfg *dataCfg, const char *pathExe) {
   rewind(fileCfg);
   do {
     fgets(strBuffer, BUFSIZ, fileCfg);
-    tmpPtr = strtok(strBuffer, " =\n\t\r\"");
+    tmpPtr = strtok(strBuffer, " =\n\t\r");
     if (tmpPtr == NULL)
       continue;
     if (strcmp("pin_status", tmpPtr) != 0)
