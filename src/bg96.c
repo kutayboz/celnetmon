@@ -189,7 +189,7 @@ int powerOff(char *pathToPort, char *pathToChip, int statusPin, int pwrKeyPin) {
   return 0;
 }
 
-int cfgPublicNetwork(char *pathToPort) {
+int configureNetwork(char *pathToPort) {
   unsigned long idx;
   int serialPort;
   char *response = malloc(sizeof(char)),
@@ -301,23 +301,24 @@ int cfg6GTN(char *pathToPort) {
     return 1;
   }
 
-  if (0 != querySerialPort(&response, serialPort,
+  /* Test the function without below commented block. */
+  /* if (0 != querySerialPort(&response, serialPort,
                            "AT+CGDCONT=1,\"IP\",\"5gtnouluiot\"", 2, NULL)) {
     printf("Error querySerialPort()\n");
     close(serialPort);
     free(response);
     return 1;
-  }
+  } */
 
   close(serialPort);
   free(response);
   return 0;
 }
 
-int connect6GTN(char *pathToPort, int waitTimeSeconds) {
-  int serialPort, refreshPeriodSeconds = 1;
-  char *response = malloc(sizeof(char)), *responseCpy, *strPtr;
-  time_t startTime;
+int defineNetworkDetails(char *pathToPort/* , int waitTimeSeconds */) {
+  int serialPort/* , refreshPeriodSeconds = 1 */;
+  char *response = malloc(sizeof(char))/* , *responseCpy, *strPtr */;
+  /* time_t startTime; */
 
   serialPort = openSerialPort(pathToPort);
   if (0 > serialPort) {
@@ -341,7 +342,7 @@ int connect6GTN(char *pathToPort, int waitTimeSeconds) {
     return 1;
   }
 
-  startTime = time(NULL);
+  /* startTime = time(NULL);
   do {
     if (0 != querySerialPort(&response, serialPort, "AT+COPS?", 180, NULL)) {
       printf("Error querySerialPort()\n");
@@ -378,7 +379,7 @@ int connect6GTN(char *pathToPort, int waitTimeSeconds) {
       break;
     sleep(1);
   }
-  free(responseCpy);
+  free(responseCpy);*/
 
   close(serialPort);
   free(response);

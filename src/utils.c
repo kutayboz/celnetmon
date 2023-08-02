@@ -5,6 +5,11 @@
 
 #include "utils.h"
 
+char *listStrDataNames[] = {"path_to_serial_port", "path_to_gpio_chip",
+                            "network_username", "network_password",
+                            "network_auth"};
+char *listIntDataNames[] = {"pin_pwr_key", "pin_status"};
+
 int checkPinVal(char *pathToChip, int pinNum) {
   int pinVal = -1;
   struct gpiod_chip *chip;
@@ -40,11 +45,11 @@ int checkPinVal(char *pathToChip, int pinNum) {
   return pinVal;
 }
 
-int readCfg(struct structCfg *dataCfg, const char *pathExe) {
+int readCfg(listCfgData cfgData, const char *pathExe) {
   char strBuffer[BUFSIZ];
   char *pathCfg, *pathDirEnd, *tmpPtr = NULL;
   const char *filenameCfg = "network_monitor.cfg";
-  int sizePathDir;
+  int sizePathDir, idx, idx2;
   unsigned long numCharRead;
   FILE *fileCfg;
 
@@ -63,137 +68,132 @@ int readCfg(struct structCfg *dataCfg, const char *pathExe) {
   fileCfg = fopen(pathCfg, "r");
   if (fileCfg == NULL) {
     printf("Cannot open config file \"%s\".\n", pathCfg);
-    goto readCfgFail1;
+    free(pathCfg);
+    return 1;
   }
 
   /* Check that it is not empty. */
   if (fgets(strBuffer, BUFSIZ, fileCfg) == NULL) {
     printf("Config file is empty.\n");
-    goto readCfgFail2;
+    fclose(fileCfg);
+    free(pathCfg);
+    return 1;
   }
 
-  /* Read the file and look for the "path_to_serial_port". */
-  rewind(fileCfg);
-  do {
-    fgets(strBuffer, BUFSIZ, fileCfg);
-    tmpPtr = strtok(strBuffer, " =\n\t\r");
-    if (tmpPtr == NULL)
-      continue;
-    if (strcmp("path_to_serial_port", tmpPtr) != 0)
-      continue;
+  /* Allocate memory for the config data list. */
+  cfgData.strDataList = malloc(STR_LIST_LENGTH * sizeof(strData));
+  cfgData.intDataList = malloc(INT_LIST_LENGTH * sizeof(intData));
 
-    tmpPtr = strtok(NULL, " =\n\t\r\"");
-    if (tmpPtr == NULL)
-      continue;
+  /* Read the file and populate the config string data. */
+  for (idx = 0; idx < STR_LIST_LENGTH; idx++) {
+    cfgData.strDataList[idx].name =
+        malloc(sizeof(char) * (strlen(listStrDataNames[idx]) + 1));
+    strcpy(cfgData.strDataList[idx].name, listStrDataNames[idx]);
+    cfgData.strDataList[idx].value = NULL;
 
-    dataCfg->pathSerialPort =
-        realloc(dataCfg->pathSerialPort, sizeof(char) * (strlen(tmpPtr) + 1));
-    strcpy(dataCfg->pathSerialPort, tmpPtr);
-    break;
-  } while (feof(fileCfg) == 0);
-  if (dataCfg->pathSerialPort == NULL) {
-    printf("Could not find the \"path_to_serial_port\" variable.\n");
-    goto readCfgFail2;
-  }
+    rewind(fileCfg);
+    do {
+      fgets(strBuffer, BUFSIZ, fileCfg);
+      tmpPtr = strtok(strBuffer, " =\n\t\r");
+      if (tmpPtr == NULL)
+        continue;
+      if (strcmp(cfgData.strDataList[idx].name, tmpPtr) != 0)
+        continue;
 
-  /* Read the file and look for the "path_to_gpio_chip". */
-  rewind(fileCfg);
-  do {
-    fgets(strBuffer, BUFSIZ, fileCfg);
-    tmpPtr = strtok(strBuffer, " =\n\t\r");
-    if (tmpPtr == NULL)
-      continue;
-    if (strcmp("path_to_gpio_chip", tmpPtr) != 0)
-      continue;
+      tmpPtr = strtok(NULL, " =\n\t\r");
+      if (tmpPtr == NULL || *tmpPtr != '\"')
+        continue;
 
-    tmpPtr = strtok(NULL, " =\n\t\r\"");
-    if (tmpPtr == NULL)
-      continue;
+      tmpPtr = strtok(tmpPtr, "\"");
+      if (tmpPtr == NULL)
+        continue;
 
-    dataCfg->pathGpioChip =
-        realloc(dataCfg->pathGpioChip, sizeof(char) * (strlen(tmpPtr) + 1));
-    strcpy(dataCfg->pathGpioChip, tmpPtr);
-    break;
-  } while (feof(fileCfg) == 0);
-  if (dataCfg->pathGpioChip == NULL) {
-    printf("Could not find the \"path_to_gpio_chip\" variable.\n");
-    goto readCfgFail3;
-  }
-
-  /* Read the file and look for the "pin_pwr_key". */
-  rewind(fileCfg);
-  do {
-    fgets(strBuffer, BUFSIZ, fileCfg);
-    tmpPtr = strtok(strBuffer, " =\n\t\r");
-    if (tmpPtr == NULL)
-      continue;
-    if (strcmp("pin_pwr_key", tmpPtr) != 0)
-      continue;
-
-    tmpPtr = strtok(NULL, " =\n\t\r\"");
-    if (tmpPtr == NULL)
-      continue;
-
-    sscanf(tmpPtr, "%d%ln", &dataCfg->pinPwrKey, &numCharRead);
-    if ((numCharRead != strlen(tmpPtr)) || (strtok(NULL, " =\n\t\r\"") != NULL)) {
-      printf("Format error for \"pin_pwr_key\".\n");
-      goto readCfgFail4;
+      cfgData.strDataList[idx].value =
+          malloc(sizeof(char) * (strlen(tmpPtr) + 1));
+      strcpy(cfgData.strDataList[idx].value, tmpPtr);
+      break;
+    } while (feof(fileCfg) == 0);
+    if (cfgData.strDataList[idx].value == NULL && idx < NETWORK_USERNAME_POS) {
+      printf("Could not find the \"%s\" variable.\n",
+             cfgData.strDataList[idx].name);
+      for (idx2 = 0; idx2 <= idx; idx2++) {
+        free(cfgData.strDataList[idx2].name);
+        free(cfgData.strDataList[idx2].value);
+      }
+      fclose(fileCfg);
+      free(pathCfg);
+      return 1;
     }
-    break;
-  } while (feof(fileCfg) == 0);
-  if (dataCfg->pinPwrKey == -1) {
-    printf("Error parsing the config file.\nCould not find the "
-           "\"pin_pwr_key\" variable.\n");
-    goto readCfgFail4;
   }
 
-  /* Read the file and look for the "pin_status". */
-  rewind(fileCfg);
-  do {
-    fgets(strBuffer, BUFSIZ, fileCfg);
-    tmpPtr = strtok(strBuffer, " =\n\t\r");
-    if (tmpPtr == NULL)
-      continue;
-    if (strcmp("pin_status", tmpPtr) != 0)
-      continue;
+  /* Populate the config integer data names. */
+  for (idx = 0; idx < INT_LIST_LENGTH; idx++) {
+    cfgData.intDataList[idx].name =
+        malloc(sizeof(char) * (strlen(listIntDataNames[idx]) + 1));
+    strcpy(cfgData.intDataList[idx].name, listIntDataNames[idx]);
+    cfgData.intDataList[idx].value = -1;
 
-    tmpPtr = strtok(NULL, " =\n\t\r\"");
-    if (tmpPtr == NULL)
-      continue;
+    rewind(fileCfg);
+    do {
+      fgets(strBuffer, BUFSIZ, fileCfg);
+      tmpPtr = strtok(strBuffer, " =\n\t\r");
+      if (tmpPtr == NULL)
+        continue;
+      if (strcmp(cfgData.intDataList[idx].name, tmpPtr) != 0)
+        continue;
 
-    sscanf(tmpPtr, "%d%ln", &dataCfg->pinStatus, &numCharRead);
-    if ((numCharRead != strlen(tmpPtr)) || (strtok(NULL, " =\n\t\r\"") != NULL)) {
-      printf("Format error for \"pin_status\".\n");
-      goto readCfgFail4;
+      tmpPtr = strtok(NULL, " =\n\t\r");
+      if (tmpPtr == NULL || *tmpPtr != '\"')
+        continue;
+
+      tmpPtr = strtok(tmpPtr, "\"");
+      if (tmpPtr == NULL)
+        continue;
+
+      sscanf(tmpPtr, "%d%ln", &cfgData.intDataList[idx].value, &numCharRead);
+      if ((numCharRead != strlen(tmpPtr)) ||
+          (strtok(NULL, " =\n\t\r\"") != NULL)) {
+        printf("Format error for \"%s\".\n", cfgData.intDataList[idx].name);
+        for (idx2 = 0; idx2 <= idx; idx2++) {
+          free(cfgData.intDataList[idx2].name);
+        }
+        fclose(fileCfg);
+        free(pathCfg);
+        return 1;
+      }
+      break;
+    } while (feof(fileCfg) == 0);
+    if (cfgData.intDataList[idx].value == -1) {
+      printf("Error parsing the config file.\nCould not find the "
+             "\"%s\" variable.\n",
+             cfgData.intDataList[idx].name);
+      for (idx2 = 0; idx2 <= idx; idx2++) {
+        free(cfgData.intDataList[idx2].name);
+      }
+      fclose(fileCfg);
+      free(pathCfg);
+      return 1;
     }
-    break;
-  } while (feof(fileCfg) == 0);
-  if (dataCfg->pinStatus == -1) {
-    printf("Error parsing the config file.\nCould not find the "
-           "\"pin_status\" variable.\n");
-    goto readCfgFail4;
   }
 
   free(pathCfg);
   fclose(fileCfg);
   return 0;
-
-readCfgFail4:
-  free(dataCfg->pathGpioChip);
-readCfgFail3:
-  free(dataCfg->pathSerialPort);
-readCfgFail2:
-  fclose(fileCfg);
-readCfgFail1:
-  free(pathCfg);
-  return 1;
 }
 
 /* Do not call this before initializing dataCfg with readCfg(). */
-int freeCfgData(struct structCfg *dataCfg) {
-  dataCfg->pinPwrKey = -1;
-  dataCfg->pinStatus = -1;
-  free(dataCfg->pathGpioChip);
-  free(dataCfg->pathSerialPort);
+int freeCfgData(listCfgData cfgData) {
+  int idx;
+  for (idx = 0; idx < STR_LIST_LENGTH; idx++) {
+    free(cfgData.strDataList[idx].name);
+    free(cfgData.strDataList[idx].value);
+  }
+  free(cfgData.strDataList);
+
+  for (idx = 0; idx < INT_LIST_LENGTH; idx++) {
+    free(cfgData.intDataList[idx].name);
+    cfgData.intDataList[idx].value = -1;
+  }
+  free(cfgData.intDataList);
   return 0;
 }
