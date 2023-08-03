@@ -1,6 +1,7 @@
 #ifndef __INCLUDE_BG96__
 #define __INCLUDE_BG96__
 
+#include "utils.h"
 #include <time.h>
 
 typedef struct networkDataTag {
@@ -10,35 +11,34 @@ typedef struct networkDataTag {
   struct tm netTime;
 } networkData;
 
-int modemPowerToggle(char *pathToChip, int pinNum);
+int modemPowerToggle(listCfgData cfgData, int pinNum);
 
 int initNetworkData(networkData *nD);
 
 int freeNetworkData(networkData *nD);
 
-int powerOn(char *pathToPort, char *pathToChip, int statusPin, int pwrKeyPin);
+int powerOn(listCfgData cfgData);
 
-int powerOff(char *pathToPort, char *pathToChip, int statusPin, int pwrKeyPin);
+int powerOff(listCfgData cfgData);
 
-int configureNetwork(char *pathToPort);
+int configureNetwork(listCfgData cfgData);
 
-int cfg6GTN(char *pathToPort);
+int cfg6GTN(listCfgData cfgData);
 
-int defineNetworkDetails(char *pathToPort/* , int waitTimeSeconds */);
+int defineNetworkDetails(listCfgData cfgData);
 
-int waitForNetwork(char *pathToPort, int waitTimeSeconds);
+int waitForNetwork(listCfgData cfgData, int waitTimeSeconds);
 
-int mqttDisc(char *pathToPort);
+int mqttDisc(listCfgData cfgData);
 
-int mqttConn(char *pathToPort, char *hostURL, int hostPort, char *username,
-             char *password);
+int mqttConn(listCfgData cfgData);
 
-int mqttPubNetData(char *pathToPort, networkData nD);
+int mqttPubNetData(listCfgData cfgData, networkData nD);
 
-int gatherData(networkData *output, char *pathToPort);
+int gatherData(networkData *output, listCfgData cfgData);
 
-int initGNSS(char *pathToPort);
+int initGNSS(listCfgData cfgData);
 
-int stopGNSS(char *pathToPort);
+int stopGNSS(listCfgData cfgData);
 
 #endif

@@ -1,0 +1,18 @@
+// Rename the config file to "celnetmon.cfg" and put it next to the executable
+// These are mandatory
+path_to_serial_port =   "/dev/serial0"
+path_to_gpio_chip   =   "/dev/gpiochip0"
+pin_pwr_key =   "17"
+pin_status  =   "27"
+network_apn =   "internet"
+mqtt_url    =   "io.adafruit.com"
+mqtt_port   =   "8883"
+
+// These are optional
+//network_username  =   "something something"
+//network_password  =   "something something"
+//network_auth  =   "something something" // Valid entries "NONE", "PAP", "CHAP", "PAP/CHAP"
+//network_operator  =   "24427" // GSM location area identification number
+//mqtt_username =   "kboz"
+//mqtt_password =   ""
+//mqtt_root_topic   =   "kboz/feeds"

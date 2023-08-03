@@ -5,10 +5,15 @@
 
 #include "utils.h"
 
-char *listStrDataNames[] = {"path_to_serial_port", "path_to_gpio_chip",
-                            "network_username", "network_password",
-                            "network_auth"};
-char *listIntDataNames[] = {"pin_pwr_key", "pin_status"};
+static char configFilename[] = "celnetmon.cfg";
+
+char *listStrDataNames[] = {
+    "path_to_serial_port", "path_to_gpio_chip", "mqtt_url",
+    "network_apn",         "mqtt_username",     "mqtt_password",
+    "mqtt_root_topic",     "network_username",  "network_password",
+    "network_auth"};
+char *listIntDataNames[] = {"pin_pwr_key", "pin_status", "mqtt_port",
+                            "network_operator"};
 
 int checkPinVal(char *pathToChip, int pinNum) {
   int pinVal = -1;
@@ -45,10 +50,9 @@ int checkPinVal(char *pathToChip, int pinNum) {
   return pinVal;
 }
 
-int readCfg(listCfgData cfgData, const char *pathExe) {
-  char strBuffer[BUFSIZ];
+int readCfg(listCfgData *cfgData, const char *pathExe) {
+  char lineBuffer[BUFSIZ];
   char *pathCfg, *pathDirEnd, *tmpPtr = NULL;
-  const char *filenameCfg = "network_monitor.cfg";
   int sizePathDir, idx, idx2;
   unsigned long numCharRead;
   FILE *fileCfg;
@@ -60,9 +64,9 @@ int readCfg(listCfgData cfgData, const char *pathExe) {
     printf("Cannot obtain the executable directory.\n");
     return 1;
   }
-  pathCfg = malloc(sizeof(char) * (sizePathDir + strlen(filenameCfg) + 2));
+  pathCfg = malloc(sizeof(char) * (sizePathDir + strlen(configFilename) + 2));
   strncpy(pathCfg, pathExe, sizePathDir + 1);
-  strcat(pathCfg, filenameCfg);
+  strcat(pathCfg, configFilename);
 
   /* Open the config file. */
   fileCfg = fopen(pathCfg, "r");
@@ -73,7 +77,7 @@ int readCfg(listCfgData cfgData, const char *pathExe) {
   }
 
   /* Check that it is not empty. */
-  if (fgets(strBuffer, BUFSIZ, fileCfg) == NULL) {
+  if (fgets(lineBuffer, BUFSIZ, fileCfg) == NULL) {
     printf("Config file is empty.\n");
     fclose(fileCfg);
     free(pathCfg);
@@ -81,81 +85,88 @@ int readCfg(listCfgData cfgData, const char *pathExe) {
   }
 
   /* Allocate memory for the config data list. */
-  cfgData.strDataList = malloc(STR_LIST_LENGTH * sizeof(strData));
-  cfgData.intDataList = malloc(INT_LIST_LENGTH * sizeof(intData));
+  cfgData->strDataList = malloc(STR_LIST_LENGTH * sizeof(strData));
+  cfgData->intDataList = malloc(INT_LIST_LENGTH * sizeof(intData));
 
   /* Read the file and populate the config string data. */
   for (idx = 0; idx < STR_LIST_LENGTH; idx++) {
-    cfgData.strDataList[idx].name =
+    cfgData->strDataList[idx].name =
         malloc(sizeof(char) * (strlen(listStrDataNames[idx]) + 1));
-    strcpy(cfgData.strDataList[idx].name, listStrDataNames[idx]);
-    cfgData.strDataList[idx].value = NULL;
+    strcpy(cfgData->strDataList[idx].name, listStrDataNames[idx]);
+    cfgData->strDataList[idx].value = NULL;
 
     rewind(fileCfg);
     do {
-      fgets(strBuffer, BUFSIZ, fileCfg);
-      tmpPtr = strtok(strBuffer, " =\n\t\r");
+      fgets(lineBuffer, BUFSIZ, fileCfg);
+      tmpPtr = strtok(lineBuffer, "=");
       if (tmpPtr == NULL)
         continue;
-      if (strcmp(cfgData.strDataList[idx].name, tmpPtr) != 0)
+      if (tmpPtr[0] == '/' && tmpPtr[1] == '/')
+        continue;
+      if (strstr(tmpPtr, cfgData->strDataList[idx].name) == NULL)
         continue;
 
-      tmpPtr = strtok(NULL, " =\n\t\r");
-      if (tmpPtr == NULL || *tmpPtr != '\"')
-        continue;
-
-      tmpPtr = strtok(tmpPtr, "\"");
+      do {
+        tmpPtr = strtok(NULL, "\"");
+      } while (tmpPtr != NULL && *tmpPtr == ' ');
       if (tmpPtr == NULL)
         continue;
 
-      cfgData.strDataList[idx].value =
+      cfgData->strDataList[idx].value =
           malloc(sizeof(char) * (strlen(tmpPtr) + 1));
-      strcpy(cfgData.strDataList[idx].value, tmpPtr);
+      strcpy(cfgData->strDataList[idx].value, tmpPtr);
       break;
     } while (feof(fileCfg) == 0);
-    if (cfgData.strDataList[idx].value == NULL && idx < NETWORK_USERNAME_POS) {
-      printf("Could not find the \"%s\" variable.\n",
-             cfgData.strDataList[idx].name);
-      for (idx2 = 0; idx2 <= idx; idx2++) {
-        free(cfgData.strDataList[idx2].name);
-        free(cfgData.strDataList[idx2].value);
+    if (cfgData->strDataList[idx].value == NULL) {
+      if (idx < NETWORK_USERNAME_POS) {
+        printf("Error parsing the config file.\nCould not find the \"%s\" "
+               "variable.\n",
+               cfgData->strDataList[idx].name);
+        for (idx2 = 0; idx2 <= idx; idx2++) {
+          free(cfgData->strDataList[idx2].name);
+          free(cfgData->strDataList[idx2].value);
+        }
+        free(cfgData->strDataList);
+        fclose(fileCfg);
+        free(pathCfg);
+        return 1;
+      } else {
+        cfgData->strDataList[idx].value =
+            realloc(cfgData->strDataList[idx].value, sizeof(char));
+        strcpy(cfgData->strDataList[idx].value, "");
       }
-      fclose(fileCfg);
-      free(pathCfg);
-      return 1;
     }
   }
 
   /* Populate the config integer data names. */
   for (idx = 0; idx < INT_LIST_LENGTH; idx++) {
-    cfgData.intDataList[idx].name =
+    cfgData->intDataList[idx].name =
         malloc(sizeof(char) * (strlen(listIntDataNames[idx]) + 1));
-    strcpy(cfgData.intDataList[idx].name, listIntDataNames[idx]);
-    cfgData.intDataList[idx].value = -1;
+    strcpy(cfgData->intDataList[idx].name, listIntDataNames[idx]);
+    cfgData->intDataList[idx].value = -1;
 
     rewind(fileCfg);
     do {
-      fgets(strBuffer, BUFSIZ, fileCfg);
-      tmpPtr = strtok(strBuffer, " =\n\t\r");
+      fgets(lineBuffer, BUFSIZ, fileCfg);
+      tmpPtr = strtok(lineBuffer, "=");
       if (tmpPtr == NULL)
         continue;
-      if (strcmp(cfgData.intDataList[idx].name, tmpPtr) != 0)
+      if (tmpPtr[0] == '/' && tmpPtr[1] == '/')
+        continue;
+      if (strstr(tmpPtr, cfgData->intDataList[idx].name) == NULL)
         continue;
 
-      tmpPtr = strtok(NULL, " =\n\t\r");
-      if (tmpPtr == NULL || *tmpPtr != '\"')
-        continue;
-
-      tmpPtr = strtok(tmpPtr, "\"");
+      do {
+        tmpPtr = strtok(NULL, "\"");
+      } while (tmpPtr != NULL && *tmpPtr == ' ');
       if (tmpPtr == NULL)
         continue;
 
-      sscanf(tmpPtr, "%d%ln", &cfgData.intDataList[idx].value, &numCharRead);
-      if ((numCharRead != strlen(tmpPtr)) ||
-          (strtok(NULL, " =\n\t\r\"") != NULL)) {
-        printf("Format error for \"%s\".\n", cfgData.intDataList[idx].name);
+      sscanf(tmpPtr, "%d%ln", &cfgData->intDataList[idx].value, &numCharRead);
+      if (numCharRead != strlen(tmpPtr)) {
+        printf("Format error for \"%s\".\n", cfgData->intDataList[idx].name);
         for (idx2 = 0; idx2 <= idx; idx2++) {
-          free(cfgData.intDataList[idx2].name);
+          free(cfgData->intDataList[idx2].name);
         }
         fclose(fileCfg);
         free(pathCfg);
@@ -163,13 +174,16 @@ int readCfg(listCfgData cfgData, const char *pathExe) {
       }
       break;
     } while (feof(fileCfg) == 0);
-    if (cfgData.intDataList[idx].value == -1) {
-      printf("Error parsing the config file.\nCould not find the "
-             "\"%s\" variable.\n",
-             cfgData.intDataList[idx].name);
+    if ((cfgData->intDataList[idx].value == -1) &&
+        (idx < NETWORK_OPERATOR_POS)) {
+      printf("Error parsing the config file.\nCould not find the \"%s\" "
+             "variable.\n",
+             cfgData->intDataList[idx].name);
       for (idx2 = 0; idx2 <= idx; idx2++) {
-        free(cfgData.intDataList[idx2].name);
+        free(cfgData->intDataList[idx2].name);
       }
+      free(cfgData->strDataList);
+      free(cfgData->intDataList);
       fclose(fileCfg);
       free(pathCfg);
       return 1;
@@ -181,19 +195,18 @@ int readCfg(listCfgData cfgData, const char *pathExe) {
   return 0;
 }
 
-/* Do not call this before initializing dataCfg with readCfg(). */
-int freeCfgData(listCfgData cfgData) {
+int freeCfgData(listCfgData *cfgData) {
   int idx;
   for (idx = 0; idx < STR_LIST_LENGTH; idx++) {
-    free(cfgData.strDataList[idx].name);
-    free(cfgData.strDataList[idx].value);
+    free(cfgData->strDataList[idx].name);
+    free(cfgData->strDataList[idx].value);
   }
-  free(cfgData.strDataList);
+  free(cfgData->strDataList);
 
   for (idx = 0; idx < INT_LIST_LENGTH; idx++) {
-    free(cfgData.intDataList[idx].name);
-    cfgData.intDataList[idx].value = -1;
+    free(cfgData->intDataList[idx].name);
+    cfgData->intDataList[idx].value = -1;
   }
-  free(cfgData.intDataList);
+  free(cfgData->intDataList);
   return 0;
 }

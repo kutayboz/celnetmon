@@ -5,14 +5,26 @@ enum {
   /* Mandatory */
   PATH_TO_SERIAL_PORT_POS,
   PATH_TO_GPIO_CHIP_POS,
+  MQTT_URL_POS,
+  NETWORK_APN_POS,
   /* Optional */
+  MQTT_USERNAME_POS,
+  MQTT_PASSWORD_POS,
+  MQTT_ROOT_TOPIC_POS,
   NETWORK_USERNAME_POS,
   NETWORK_PASSWORD_POS,
   NETWORK_AUTH_POS,
   STR_LIST_LENGTH
 };
 
-enum { PIN_PWR_KEY_POS, PIN_STATUS_POS, INT_LIST_LENGTH };
+enum { /*Mandatory */
+       PIN_PWR_KEY_POS,
+       PIN_STATUS_POS,
+       MQTT_PORT_POS,
+       /* Optional */
+       NETWORK_OPERATOR_POS,
+       INT_LIST_LENGTH
+};
 
 typedef struct {
   char *name;
@@ -24,6 +36,7 @@ typedef struct {
   int value;
 } intData;
 
+/* Initialize this with NULL and 0 values. */
 typedef struct {
   strData *strDataList;
   intData *intDataList;
@@ -41,8 +54,8 @@ network_username  = "something something"
 network_password  = "something something"
 network_auth  = "something something"
 */
-int readCfg(listCfgData dataCfg, const char *pathExe);
+int readCfg(listCfgData *cfgData, const char *pathExe);
 
-int freeCfgData(listCfgData cfgData);
+int freeCfgData(listCfgData *cfgData);
 
 #endif

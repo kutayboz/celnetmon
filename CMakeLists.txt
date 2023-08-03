@@ -4,11 +4,11 @@ set(CMAKE_C_STANDARD_REQUIRED True)
 #LIBGPIOD requires extensions over C90
 #set(CMAKE_C_EXTENSIONS OFF)
 
-project(network_monitor VERSION 0.1.0)
+project(celnetmon VERSION 1.0.0)
 set(CMAKE_C_FLAGS "-Wall -Wextra -Werror -pedantic-errors")
 set(CMAKE_C_FLAGS_DEBUG "${CMAKE_C_FLAGS} -g -O0")
 set(CMAKE_C_FLAGS_RELEASE "${CMAKE_C_FLAGS} -O2")
-add_executable(network_monitor ./src/main.c)
+add_executable(celnetmon ./src/main.c)
 
 add_library(serial STATIC ./src/serial.c ./include/serial.h)
 
@@ -20,7 +20,7 @@ add_library(utils STATIC ./src/utils.c ./include/utils.h)
 target_link_libraries(utils gpiod)
 target_include_directories(utils PUBLIC ./include)
 
-target_include_directories(network_monitor PUBLIC ./include)
-target_link_libraries(network_monitor serial bg96 utils)
+target_include_directories(celnetmon PUBLIC ./include)
+target_link_libraries(celnetmon serial bg96 utils)
 
-install(TARGETS network_monitor DESTINATION ${CMAKE_CURRENT_SOURCE_DIR}/bin/)
+install(TARGETS celnetmon DESTINATION ${CMAKE_CURRENT_SOURCE_DIR}/bin/)

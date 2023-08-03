@@ -10,47 +10,6 @@
 #include <time.h>
 #include <unistd.h>
 
-int modemPowerToggle(char *pathToChip, int pinNum) {
-  struct gpiod_chip *chip;
-  struct gpiod_line *line;
-
-  chip = gpiod_chip_open(pathToChip);
-  if (!chip) {
-    perror("Error opening GPIO chip");
-    return 1;
-  }
-
-  line = gpiod_chip_get_line(chip, pinNum);
-  if (!line) {
-    perror("Error getting GPIO line");
-    gpiod_chip_close(chip);
-    return 1;
-  }
-
-  if (gpiod_line_request_output(line, "cellular modem power toggle", 0) < 0) {
-    perror("Error setting GPIO line as output");
-    gpiod_chip_close(chip);
-    return 1;
-  }
-
-  if (gpiod_line_set_value(line, 1) < 0) {
-    perror("Error setting GPIO line high");
-    gpiod_chip_close(chip);
-    return 1;
-  }
-
-  sleep(1);
-
-  if (gpiod_line_set_value(line, 0) < 0) {
-    perror("Error setting GPIO line low");
-    gpiod_chip_close(chip);
-    return 1;
-  }
-
-  gpiod_chip_close(chip);
-  return 0;
-}
-
 int initNetworkData(networkData *nD) {
   nD->operatorName = calloc(1, sizeof(char));
   nD->networkName = calloc(1, sizeof(char));
@@ -93,9 +52,55 @@ int freeNetworkData(networkData *nD) {
   return 0;
 }
 
-int powerOn(char *pathToPort, char *pathToChip, int statusPin, int pwrKeyPin) {
-  int moduleStatus, serialPort;
-  char *response;
+int modemPowerToggle(listCfgData cfgData, int pinNum) {
+  struct gpiod_chip *chip;
+  struct gpiod_line *line;
+  char *pathToChip = cfgData.strDataList[PATH_TO_GPIO_CHIP_POS].value;
+
+  chip = gpiod_chip_open(pathToChip);
+  if (!chip) {
+    perror("Error opening GPIO chip");
+    return 1;
+  }
+
+  line = gpiod_chip_get_line(chip, pinNum);
+  if (!line) {
+    perror("Error getting GPIO line");
+    gpiod_chip_close(chip);
+    return 1;
+  }
+
+  if (gpiod_line_request_output(line, "cellular modem power toggle", 0) < 0) {
+    perror("Error setting GPIO line as output");
+    gpiod_chip_close(chip);
+    return 1;
+  }
+
+  if (gpiod_line_set_value(line, 1) < 0) {
+    perror("Error setting GPIO line high");
+    gpiod_chip_close(chip);
+    return 1;
+  }
+
+  sleep(1);
+
+  if (gpiod_line_set_value(line, 0) < 0) {
+    perror("Error setting GPIO line low");
+    gpiod_chip_close(chip);
+    return 1;
+  }
+
+  gpiod_chip_close(chip);
+  return 0;
+}
+
+int powerOn(listCfgData cfgData) {
+  int moduleStatus, serialPort,
+      statusPin = cfgData.intDataList[PIN_STATUS_POS].value,
+      pwrKeyPin = cfgData.intDataList[PIN_PWR_KEY_POS].value;
+  char *response,
+      *pathToPort = cfgData.strDataList[PATH_TO_SERIAL_PORT_POS].value,
+      *pathToChip = cfgData.strDataList[PATH_TO_GPIO_CHIP_POS].value;
   time_t pwrKeyTime;
 
   moduleStatus = checkPinVal(pathToChip, statusPin);
@@ -105,7 +110,7 @@ int powerOn(char *pathToPort, char *pathToChip, int statusPin, int pwrKeyPin) {
   } else if (moduleStatus == 1) {
     printf("Module is already on\n");
     return 1;
-  } else if (0 != modemPowerToggle(pathToChip, pwrKeyPin)) {
+  } else if (0 != modemPowerToggle(cfgData, pwrKeyPin)) {
     printf("Error toggling modem power\n");
     return 1;
   }
@@ -142,9 +147,13 @@ int powerOn(char *pathToPort, char *pathToChip, int statusPin, int pwrKeyPin) {
   return 0;
 }
 
-int powerOff(char *pathToPort, char *pathToChip, int statusPin, int pwrKeyPin) {
-  int serialPort, moduleStatus;
-  char *response;
+int powerOff(listCfgData cfgData) {
+  int serialPort, moduleStatus,
+      statusPin = cfgData.intDataList[PIN_STATUS_POS].value,
+      pwrKeyPin = cfgData.intDataList[PIN_PWR_KEY_POS].value;
+  char *response,
+      *pathToPort = cfgData.strDataList[PATH_TO_SERIAL_PORT_POS].value,
+      *pathToChip = cfgData.strDataList[PATH_TO_GPIO_CHIP_POS].value;
   time_t timePowdCmd, timePwrKey;
 
   moduleStatus = checkPinVal(pathToChip, statusPin);
@@ -178,7 +187,7 @@ int powerOff(char *pathToPort, char *pathToChip, int statusPin, int pwrKeyPin) {
     } else if (time(NULL) - timePwrKey > 12) {
       printf("Error: Modem status pin did not switch off after 12s\nUsing "
              "power key\n");
-      if (0 != modemPowerToggle(pathToChip, pwrKeyPin)) {
+      if (0 != modemPowerToggle(cfgData, pwrKeyPin)) {
         printf("Error toggling modem power\n");
         return 1;
       }
@@ -189,16 +198,21 @@ int powerOff(char *pathToPort, char *pathToChip, int statusPin, int pwrKeyPin) {
   return 0;
 }
 
-int configureNetwork(char *pathToPort) {
+int configureNetwork(listCfgData cfgData) {
   unsigned long idx;
-  int serialPort;
-  char *response = malloc(sizeof(char)),
+  int serialPort, netAuthInt;
+  char *response = malloc(sizeof(char)), *cmdBuf,
        *cmdList[] = {"AT+QCFG=\"nwscanmode\",3,1",
                      "AT+QCFG=\"iotopmode\",1,1",
                      "AT+QCFG=\"band\",F,400A0E189F,A0E189F,1",
                      "AT+QCFG=\"servicedomain\",1,1",
                      "AT+COPS=0,0",
-                     "AT+CEREG=2"};
+                     "AT+CEREG=2"},
+       *pathToPort = cfgData.strDataList[PATH_TO_SERIAL_PORT_POS].value,
+       *netAPN = cfgData.strDataList[NETWORK_APN_POS].value,
+       *netUsername = cfgData.strDataList[NETWORK_USERNAME_POS].value,
+       *netPasword = cfgData.strDataList[NETWORK_PASSWORD_POS].value,
+       *netAuthStr = cfgData.strDataList[NETWORK_AUTH_POS].value;
 
   serialPort = openSerialPort(pathToPort);
   if (0 > serialPort) {
@@ -234,8 +248,29 @@ int configureNetwork(char *pathToPort) {
     return 1;
   }
 
-  if (0 != querySerialPort(&response, serialPort,
-                           "AT+QICSGP=1,1,\"internet\",\"\",\"\",1", 5, NULL)) {
+  if (strcmp(netAuthStr, "NONE") == 0 || strcmp(netAuthStr, "") == 0 ||
+      (netAuthStr == NULL)) {
+    netAuthInt = 0;
+  } else if (strcmp(netAuthStr, "PAP") == 0) {
+    netAuthInt = 1;
+  } else if (strcmp(netAuthStr, "CHAP") == 0) {
+    netAuthInt = 2;
+  } else if (strcmp(netAuthStr, "PAP/CHAP") == 0) {
+    netAuthInt = 3;
+  } else {
+    printf("Network authenication \"%s\" is unknown.\n", netAuthStr);
+    close(serialPort);
+    free(response);
+    return 1;
+  }
+
+  cmdBuf =
+      malloc(sizeof(char) * (strlen("AT+QICSGP=1,1,\"\",\"\",\"\",") +
+                             strlen(netUsername) + strlen(netPasword) + 3));
+  sprintf(cmdBuf, "AT+QICSGP=1,1,\"%s\",\"%s\",\"%s\",%d", netAPN, netUsername,
+          netPasword, netAuthInt);
+
+  if (0 != querySerialPort(&response, serialPort, cmdBuf, 5, NULL)) {
     printf("Error querySerialPort()\n");
     close(serialPort);
     free(response);
@@ -247,7 +282,7 @@ int configureNetwork(char *pathToPort) {
   return 0;
 }
 
-int cfg6GTN(char *pathToPort) {
+int cfg6GTN(listCfgData cfgData) {
   unsigned long idx;
   int serialPort;
   char *response = malloc(sizeof(char)),
@@ -255,8 +290,9 @@ int cfg6GTN(char *pathToPort) {
                      "AT+QCFG=\"iotopmode\",1,1",
                      "AT+QCFG=\"band\",0,8000000,8000000,1",
                      "AT+QCFG=\"servicedomain\",1,1",
-                     "AT+COPS=0,0",
-                     "AT+CEREG=2"};
+                     "AT+COPS=0,0,\"\",9",
+                     "AT+CEREG=2"},
+       *pathToPort = cfgData.strDataList[PATH_TO_SERIAL_PORT_POS].value;
 
   serialPort = openSerialPort(pathToPort);
   if (0 > serialPort) {
@@ -315,10 +351,14 @@ int cfg6GTN(char *pathToPort) {
   return 0;
 }
 
-int defineNetworkDetails(char *pathToPort/* , int waitTimeSeconds */) {
-  int serialPort/* , refreshPeriodSeconds = 1 */;
-  char *response = malloc(sizeof(char))/* , *responseCpy, *strPtr */;
-  /* time_t startTime; */
+int defineNetworkDetails(listCfgData cfgData) {
+  int serialPort;
+  char *response = malloc(sizeof(char)),
+       *pathToPort = cfgData.strDataList[PATH_TO_SERIAL_PORT_POS].value,
+       *cmdBuf = malloc(sizeof(char) * (strlen("AT+COPS=1,2,\"\",9") + 6));
+
+  sprintf(cmdBuf, "AT+COPS=1,2,\"%d\",9",
+          cfgData.intDataList[NETWORK_OPERATOR_POS].value);
 
   serialPort = openSerialPort(pathToPort);
   if (0 > serialPort) {
@@ -327,8 +367,7 @@ int defineNetworkDetails(char *pathToPort/* , int waitTimeSeconds */) {
     return 1;
   }
 
-  if (0 != querySerialPort(&response, serialPort, "AT+COPS=1,2,\"24427\",9",
-                           180, NULL)) {
+  if (0 != querySerialPort(&response, serialPort, cmdBuf, 180, NULL)) {
     printf("Error querying AT+COPS=1\n");
     close(serialPort);
     free(response);
@@ -386,9 +425,11 @@ int defineNetworkDetails(char *pathToPort/* , int waitTimeSeconds */) {
   return 0;
 }
 
-int waitForNetwork(char *pathToPort, int waitTimeSeconds) {
+int waitForNetwork(listCfgData cfgData, int waitTimeSeconds) {
   int serialPort, refreshPeriodSeconds = 1;
-  char *response = malloc(sizeof(char)), *responseCpy, *strPtr;
+  char *response = malloc(sizeof(char)),
+       *pathToPort = cfgData.strDataList[PATH_TO_SERIAL_PORT_POS].value,
+       *responseCpy, *strPtr;
   time_t startTime;
 
   serialPort = openSerialPort(pathToPort);
@@ -442,9 +483,10 @@ int waitForNetwork(char *pathToPort, int waitTimeSeconds) {
   return 0;
 }
 
-int mqttDisc(char *pathToPort) {
+int mqttDisc(listCfgData cfgData) {
   int serialPort;
-  char *response = malloc(sizeof(char));
+  char *response = malloc(sizeof(char)),
+       *pathToPort = cfgData.strDataList[PATH_TO_SERIAL_PORT_POS].value;
 
   serialPort = openSerialPort(pathToPort);
   if (0 > serialPort) {
@@ -490,11 +532,15 @@ int mqttDisc(char *pathToPort) {
   return 0;
 }
 
-int mqttConn(char *pathToPort, char *hostURL, int hostPort, char *username,
-             char *password) {
-  int serialPort, cmdStrLen;
+int mqttConn(listCfgData cfgData) {
+  int serialPort, cmdStrLen,
+      hostPort = cfgData.intDataList[MQTT_PORT_POS].value;
   unsigned long idx;
-  char *response = malloc(sizeof(char)), *command, clientID[11];
+  char *response = malloc(sizeof(char)), *command, clientID[11],
+       *pathToPort = cfgData.strDataList[PATH_TO_SERIAL_PORT_POS].value,
+       *hostURL = cfgData.strDataList[MQTT_URL_POS].value,
+       *username = cfgData.strDataList[MQTT_USERNAME_POS].value,
+       *password = cfgData.strDataList[MQTT_PASSWORD_POS].value;
 
   srand(time(NULL));
   for (idx = 0; idx < sizeof(clientID) - 1; idx++) {
@@ -589,7 +635,7 @@ mqttConnError3:
   return 1;
 }
 
-int mqttPubNetData(char *pathToPort, networkData nD) {
+int mqttPubNetData(listCfgData cfgData, networkData nD) {
   int serialPort, cmdStrLen, msgID, msgSize;
   char *response = malloc(sizeof(char)), *command = malloc(sizeof(char)),
        *msg = malloc(sizeof(char)),
@@ -607,7 +653,8 @@ int mqttPubNetData(char *pathToPort, networkData nD) {
                         "\t\"lat\": %s,\n"
                         "\t\"lon\": %s,\n"
                         "\t\"ele\": %s\n"
-                        "}";
+                        "}",
+       *pathToPort = cfgData.strDataList[PATH_TO_SERIAL_PORT_POS].value;
 
   msgSize = sizeof(char) * (strlen(textDataTemplate) + strlen(nD.operatorName) +
                             strlen(nD.networkName) + strlen(nD.networkRegStat) +
@@ -628,10 +675,11 @@ int mqttPubNetData(char *pathToPort, networkData nD) {
 
   msgID = rand() % 65536;
   cmdStrLen = strlen("AT+QMTPUB=0") + (int)ceil(log10(msgID)) + 1 + 1 +
-              strlen("kboz/feeds/textinfo") + (int)ceil(log10(msgSize)) + 8;
+              strlen(cfgData.strDataList[MQTT_ROOT_TOPIC_POS].value) +
+              strlen("/textinfo") + (int)ceil(log10(msgSize)) + 8;
   command = realloc(command, sizeof(char) * (cmdStrLen + 1));
-  snprintf(command, cmdStrLen + 1, "AT+QMTPUB=0,%d,1,0,\"%s\",%d", msgID,
-           "kboz/feeds/textinfo", msgSize);
+  snprintf(command, cmdStrLen + 1, "AT+QMTPUB=0,%d,1,0,\"%s%s\",%d", msgID,
+           cfgData.strDataList[MQTT_ROOT_TOPIC_POS].value, "/textinfo", msgSize);
   if (0 != querySerialPort(&response, serialPort, command, 15, (char *)-1)) {
     printf("Error querying publish command: %s\n", command);
     goto mqttPubError1;
@@ -646,10 +694,11 @@ int mqttPubNetData(char *pathToPort, networkData nD) {
   strncpy(msg, nD.rssi, msgSize / sizeof(char));
   msgID = rand() % 65536;
   cmdStrLen = strlen("AT+QMTPUB=0") + (int)ceil(log10(msgID)) + 1 + 1 +
-              strlen("kboz/feeds/rssi") + (int)ceil(log10(msgSize)) + 8;
+              strlen(cfgData.strDataList[MQTT_ROOT_TOPIC_POS].value) +
+              strlen("/rssi") + (int)ceil(log10(msgSize)) + 8;
   command = realloc(command, sizeof(char) * (cmdStrLen + 1));
-  snprintf(command, cmdStrLen + 1, "AT+QMTPUB=0,%d,1,0,\"%s\",%d", msgID,
-           "kboz/feeds/rssi", msgSize);
+  snprintf(command, cmdStrLen + 1, "AT+QMTPUB=0,%d,1,0,\"%s%s\",%d", msgID,
+           cfgData.strDataList[MQTT_ROOT_TOPIC_POS].value, "/rssi", msgSize);
   if (0 != querySerialPort(&response, serialPort, command, 15, (char *)-1)) {
     printf("Error querying publish command: %s\n", command);
     goto mqttPubError1;
@@ -664,10 +713,11 @@ int mqttPubNetData(char *pathToPort, networkData nD) {
   strncpy(msg, nD.rsrp, msgSize / sizeof(char));
   msgID = rand() % 65536;
   cmdStrLen = strlen("AT+QMTPUB=0") + (int)ceil(log10(msgID)) + 1 + 1 +
-              strlen("kboz/feeds/rsrp") + (int)ceil(log10(msgSize)) + 8;
+              strlen(cfgData.strDataList[MQTT_ROOT_TOPIC_POS].value) +
+              strlen("/rsrp") + (int)ceil(log10(msgSize)) + 8;
   command = realloc(command, sizeof(char) * (cmdStrLen + 1));
-  snprintf(command, cmdStrLen + 1, "AT+QMTPUB=0,%d,1,0,\"%s\",%d", msgID,
-           "kboz/feeds/rsrp", msgSize);
+  snprintf(command, cmdStrLen + 1, "AT+QMTPUB=0,%d,1,0,\"%s%s\",%d", msgID,
+           cfgData.strDataList[MQTT_ROOT_TOPIC_POS].value, "/rsrp", msgSize);
   if (0 != querySerialPort(&response, serialPort, command, 15, (char *)-1)) {
     printf("Error querying publish command: %s\n", command);
     goto mqttPubError1;
@@ -682,10 +732,11 @@ int mqttPubNetData(char *pathToPort, networkData nD) {
   strncpy(msg, nD.sinr, msgSize / sizeof(char));
   msgID = rand() % 65536;
   cmdStrLen = strlen("AT+QMTPUB=0") + (int)ceil(log10(msgID)) + 1 + 1 +
-              strlen("kboz/feeds/sinr") + (int)ceil(log10(msgSize)) + 8;
+              strlen(cfgData.strDataList[MQTT_ROOT_TOPIC_POS].value) +
+              strlen("/sinr") + (int)ceil(log10(msgSize)) + 8;
   command = realloc(command, sizeof(char) * (cmdStrLen + 1));
-  snprintf(command, cmdStrLen + 1, "AT+QMTPUB=0,%d,1,0,\"%s\",%d", msgID,
-           "kboz/feeds/sinr", msgSize);
+  snprintf(command, cmdStrLen + 1, "AT+QMTPUB=0,%d,1,0,\"%s%s\",%d", msgID,
+           cfgData.strDataList[MQTT_ROOT_TOPIC_POS].value, "/sinr", msgSize);
   if (0 != querySerialPort(&response, serialPort, command, 15, (char *)-1)) {
     printf("Error querying publish command: %s\n", command);
     goto mqttPubError1;
@@ -700,10 +751,11 @@ int mqttPubNetData(char *pathToPort, networkData nD) {
   strncpy(msg, nD.rsrq, msgSize / sizeof(char));
   msgID = rand() % 65536;
   cmdStrLen = strlen("AT+QMTPUB=0") + (int)ceil(log10(msgID)) + 1 + 1 +
-              strlen("kboz/feeds/rsrq") + (int)ceil(log10(msgSize)) + 8;
+              strlen(cfgData.strDataList[MQTT_ROOT_TOPIC_POS].value) +
+              strlen("/rsrq") + (int)ceil(log10(msgSize)) + 8;
   command = realloc(command, sizeof(char) * (cmdStrLen + 1));
-  snprintf(command, cmdStrLen + 1, "AT+QMTPUB=0,%d,1,0,\"%s\",%d", msgID,
-           "kboz/feeds/rsrq", msgSize);
+  snprintf(command, cmdStrLen + 1, "AT+QMTPUB=0,%d,1,0,\"%s%s\",%d", msgID,
+           cfgData.strDataList[MQTT_ROOT_TOPIC_POS].value, "/rsrq", msgSize);
   if (0 != querySerialPort(&response, serialPort, command, 15, (char *)-1)) {
     printf("Error querying publish command: %s\n", command);
     goto mqttPubError1;
@@ -718,10 +770,11 @@ int mqttPubNetData(char *pathToPort, networkData nD) {
   strncpy(msg, nD.ber, msgSize / sizeof(char));
   msgID = rand() % 65536;
   cmdStrLen = strlen("AT+QMTPUB=0") + (int)ceil(log10(msgID)) + 1 + 1 +
-              strlen("kboz/feeds/ber") + (int)ceil(log10(msgSize)) + 8;
+              strlen(cfgData.strDataList[MQTT_ROOT_TOPIC_POS].value) +
+              strlen("/ber") + (int)ceil(log10(msgSize)) + 8;
   command = realloc(command, sizeof(char) * (cmdStrLen + 1));
-  snprintf(command, cmdStrLen + 1, "AT+QMTPUB=0,%d,1,0,\"%s\",%d", msgID,
-           "kboz/feeds/ber", msgSize);
+  snprintf(command, cmdStrLen + 1, "AT+QMTPUB=0,%d,1,0,\"%s%s\",%d", msgID,
+           cfgData.strDataList[MQTT_ROOT_TOPIC_POS].value, "/ber", msgSize);
   if (0 != querySerialPort(&response, serialPort, command, 15, (char *)-1)) {
     printf("Error querying publish command: %s\n", command);
     goto mqttPubError1;
@@ -741,10 +794,12 @@ int mqttPubNetData(char *pathToPort, networkData nD) {
 
   msgID = rand() % 65536;
   cmdStrLen = strlen("AT+QMTPUB=0") + (int)ceil(log10(msgID)) + 1 + 1 +
-              strlen("kboz/feeds/gpsdata/json") + (int)ceil(log10(msgSize)) + 8;
+              strlen(cfgData.strDataList[MQTT_ROOT_TOPIC_POS].value) +
+              strlen("/gpsdata/json") + (int)ceil(log10(msgSize)) + 8;
   command = realloc(command, sizeof(char) * (cmdStrLen + 1));
-  snprintf(command, cmdStrLen + 1, "AT+QMTPUB=0,%d,1,0,\"%s\",%d", msgID,
-           "kboz/feeds/gpsdata/json", msgSize);
+  snprintf(command, cmdStrLen + 1, "AT+QMTPUB=0,%d,1,0,\"%s%s\",%d", msgID,
+           cfgData.strDataList[MQTT_ROOT_TOPIC_POS].value, "/gpsdata/json",
+           msgSize);
   if (0 != querySerialPort(&response, serialPort, command, 15, (char *)-1)) {
     printf("Error querying publish command: %s\n", command);
     goto mqttPubError1;
@@ -769,9 +824,10 @@ mqttPubError2:
   return 1;
 }
 
-int gatherData(networkData *output, char *pathToPort) {
+int gatherData(networkData *output, listCfgData cfgData) {
   int serialPort, strLen, tmpNum;
-  char *response = malloc(sizeof(char)), *varPtr, *qcsqSystemMode;
+  char *response = malloc(sizeof(char)), *varPtr, *qcsqSystemMode,
+       *pathToPort = cfgData.strDataList[PATH_TO_SERIAL_PORT_POS].value;
 
   serialPort = openSerialPort(pathToPort);
   if (0 > serialPort) {
@@ -1004,8 +1060,9 @@ gatherDataError2:
   return 1;
 }
 
-int initGNSS(char *pathToPort) {
-  char *response = malloc(sizeof(char));
+int initGNSS(listCfgData cfgData) {
+  char *response = malloc(sizeof(char)),
+       *pathToPort = cfgData.strDataList[PATH_TO_SERIAL_PORT_POS].value;
   int serialPort;
 
   serialPort = openSerialPort(pathToPort);
@@ -1043,8 +1100,9 @@ initGNSSError2:
   return 1;
 }
 
-int stopGNSS(char *pathToPort) {
-  char *response = malloc(sizeof(char));
+int stopGNSS(listCfgData cfgData) {
+  char *response = malloc(sizeof(char)),
+       *pathToPort = cfgData.strDataList[PATH_TO_SERIAL_PORT_POS].value;
   int serialPort;
 
   serialPort = openSerialPort(pathToPort);

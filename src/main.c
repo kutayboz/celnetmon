@@ -16,7 +16,7 @@ int main(int argc, char **argv) {
     return 1;
   }
 
-  if (readCfg(cfgData, argv[0]) != 0) {
+  if (readCfg(&cfgData, argv[0]) != 0) {
     printf("Error reading the config file.\n");
     return 1;
   }
@@ -57,111 +57,98 @@ int main(int argc, char **argv) {
     return 0;
   } */
 
-  if (0 == strcmp(argv[1], "--initConnection")) {
+  if (0 == strcmp(argv[1], "--init")) {
 
     printf("Powering on\n");
-    if (0 != powerOn(cfgData.strDataList[PATH_TO_SERIAL_PORT_POS].value,
-                     cfgData.strDataList[PATH_TO_GPIO_CHIP_POS].value,
-                     cfgData.intDataList[PIN_STATUS_POS].value,
-                     cfgData.intDataList[PIN_PWR_KEY_POS].value)) {
+    if (0 != powerOn(cfgData)) {
       printf("Error powering the module on\n");
-      freeCfgData(cfgData);
+      freeCfgData(&cfgData);
       return 1;
     }
 
     printf("Initiating GNSS\n");
-    if (0 != initGNSS(cfgData.strDataList[PATH_TO_SERIAL_PORT_POS].value)) {
+    if (0 != initGNSS(cfgData)) {
       printf("Error initiating GNSS\n");
-      freeCfgData(cfgData);
+      freeCfgData(&cfgData);
       return 1;
     }
 
     printf("Configuring the network settings\n");
-    if (0 !=
-        configureNetwork(cfgData.strDataList[PATH_TO_SERIAL_PORT_POS].value)) {
+    if (0 != configureNetwork(cfgData)) {
       printf("Error setting network configuration\n");
-      freeCfgData(cfgData);
+      freeCfgData(&cfgData);
       return 1;
     }
 
-    if (1 /*DETAILS*/) {
-      printf("Defining operator and PDP context\n");
-      if (0 !=
-          defineNetworkDetails(
-              cfgData.strDataList[PATH_TO_SERIAL_PORT_POS].value /* , 120 */)) {
-        printf("Error defining operator and PDP context\n");
-        freeCfgData(cfgData);
+    if (cfgData.intDataList[NETWORK_OPERATOR_POS].value != -1) {
+      printf("Defining operator \"%d\"\n",
+             cfgData.intDataList[NETWORK_OPERATOR_POS].value);
+      if (0 != defineNetworkDetails(cfgData)) {
+        printf("Error defining the specified operator\n");
+        freeCfgData(&cfgData);
         return 1;
       }
     }
 
     printf("Waiting for establishing network connection\n");
-    if (0 != waitForNetwork(cfgData.strDataList[PATH_TO_SERIAL_PORT_POS].value,
-                            120)) {
+    if (0 != waitForNetwork(cfgData, 120)) {
       printf("Error while waiting for network connection\n");
-      freeCfgData(cfgData);
+      freeCfgData(&cfgData);
       return 1;
     }
 
     printf("Initialization complete\n");
-    freeCfgData(cfgData);
+    freeCfgData(&cfgData);
     return 0;
   }
 
   else if (0 == strcmp(argv[1], "--stop")) {
 
     printf("Stopping GNSS\n");
-    if (0 != stopGNSS(cfgData.strDataList[PATH_TO_SERIAL_PORT_POS].value)) {
+    if (0 != stopGNSS(cfgData)) {
       printf("Error stopping GNSS\n");
     }
 
     printf("Disconnecting MQTT\n");
-    if (0 != mqttDisc(cfgData.strDataList[PATH_TO_SERIAL_PORT_POS].value)) {
+    if (0 != mqttDisc(cfgData)) {
       printf("Could not disconnect MQTT\n");
     }
 
     printf("Powering off\n");
-    if (0 != powerOff(cfgData.strDataList[PATH_TO_SERIAL_PORT_POS].value,
-                      cfgData.strDataList[PATH_TO_GPIO_CHIP_POS].value,
-                      cfgData.intDataList[PIN_STATUS_POS].value,
-                      cfgData.intDataList[PIN_PWR_KEY_POS].value)) {
+    if (0 != powerOff(cfgData)) {
       printf("Error powering the module off\n");
-      freeCfgData(cfgData);
+      freeCfgData(&cfgData);
       return 1;
     }
     printf("Power off complete\n");
-    freeCfgData(cfgData);
+    freeCfgData(&cfgData);
     return 0;
   }
 
-  else if (0 == strcmp(argv[1], "--netinfo-pub")) {
+  else if (0 == strcmp(argv[1], "--publish")) {
     networkData *nD = malloc(sizeof(networkData));
 
     printf("Obtaining network info\n");
     initNetworkData(nD);
-    if (gatherData(nD, cfgData.strDataList[PATH_TO_SERIAL_PORT_POS].value) !=
-        0) {
+    if (gatherData(nD, cfgData) != 0) {
       printf("Failed to gather network info\n");
       goto netinfopubFail;
     }
 
     printf("Connecting to the MQTT broker\n");
-    if (0 != mqttConn(cfgData.strDataList[PATH_TO_SERIAL_PORT_POS].value,
-                      "io.adafruit.com", 8883, "kboz",
-                      "aio_lvhz87FJ0rIlidH8g30V5mQ7FK7s")) {
+    if (0 != mqttConn(cfgData)) {
       printf("Error connecting MQTT\n");
       goto netinfopubFail;
     }
 
     printf("Publishing network information\n");
-    if (0 != mqttPubNetData(cfgData.strDataList[PATH_TO_SERIAL_PORT_POS].value,
-                            *nD)) {
+    if (0 != mqttPubNetData(cfgData, *nD)) {
       printf("Error publishing to MQTT server\n");
       goto netinfopubFail;
     }
 
     printf("Disconnecting from the MQTT broker\n");
-    if (0 != mqttDisc(cfgData.strDataList[PATH_TO_SERIAL_PORT_POS].value)) {
+    if (0 != mqttDisc(cfgData)) {
       printf("Could not disconnect MQTT\n");
       goto netinfopubFail;
     }
@@ -169,19 +156,19 @@ int main(int argc, char **argv) {
     printf("Network info publish complete\n");
     freeNetworkData(nD);
     free(nD);
-    freeCfgData(cfgData);
+    freeCfgData(&cfgData);
     return 0;
 
   netinfopubFail:
     freeNetworkData(nD);
     free(nD);
-    freeCfgData(cfgData);
+    freeCfgData(&cfgData);
     return 1;
   }
 
   else {
     printf("Unknown arguments\n");
-    freeCfgData(cfgData);
+    freeCfgData(&cfgData);
     return 1;
   }
 }
